@@ -62,7 +62,7 @@ function TouristMap() {
       : null;
 
   return (
-    <div className="tourist-page">
+    <div className="app-page">
       <h1 className="page-title">Live map</h1>
 
       {error && <p className="form-error">{error}</p>}

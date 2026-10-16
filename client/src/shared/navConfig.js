@@ -1,0 +1,33 @@
+import {
+  BarChart3, ClipboardCheck, Home, LayoutDashboard, Link2, MapPin, Radar, Shapes, Siren, User, Users, Watch,
+} from 'lucide-react';
+
+/**
+ * One navigation source for the whole app. AppShell picks NAV[user.role].
+ *  - `mobile: true`  → shown in the mobile bottom tab bar (max 5 incl. "More").
+ *    If no item is flagged, all items are shown (tourist has exactly 5).
+ *  - `labelKey`      → i18n key (tourist area); `label` is the English fallback.
+ */
+export const NAV = {
+  admin: [
+    { to: '/admin',            label: 'Dashboard',    icon: LayoutDashboard, end: true, mobile: true },
+    { to: '/admin/map',        label: 'Live map',     icon: Radar,           mobile: true },
+    { to: '/admin/incidents',  label: 'Incidents',    icon: Siren,           mobile: true },
+    { to: '/admin/tourists',   label: 'Tourists',     icon: Users,           mobile: true },
+    { to: '/admin/zones',      label: 'Zones',        icon: Shapes },
+    { to: '/admin/devices',    label: 'Devices',      icon: Watch },
+    { to: '/admin/analytics',  label: 'Analytics',    icon: BarChart3 },
+    { to: '/admin/blockchain', label: 'Audit proofs', icon: Link2 },
+  ],
+  // Order matters: SOS sits in the centre slot of the 5-item mobile tab bar.
+  tourist: [
+    { to: '/tourist',          label: 'Home',      labelKey: 'nav.home',    icon: Home, end: true },
+    { to: '/tourist/map',      label: 'Map',       labelKey: 'nav.map',     icon: MapPin },
+    { to: '/tourist/sos',      label: 'SOS',       labelKey: 'nav.sos',     icon: Siren, sos: true },
+    { to: '/tourist/checks',   label: 'Check-ins', labelKey: 'nav.checks',  icon: ClipboardCheck },
+    { to: '/tourist/profile',  label: 'Profile',   labelKey: 'nav.profile', icon: User },
+  ],
+};
+
+export const ROLE_HOME = { admin: '/admin', tourist: '/tourist' };
+export const ROLE_TITLE = { admin: 'STS Admin', tourist: 'Smart Tourist Safety' };

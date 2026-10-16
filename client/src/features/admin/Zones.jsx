@@ -173,7 +173,7 @@ function Zones() {
 
   if (loading) {
     return (
-      <div className="dashboard-page">
+      <div className="app-page">
         <h1 className="page-title">Zones</h1>
         <SkeletonRows rows={6} />
       </div>
@@ -181,7 +181,7 @@ function Zones() {
   }
 
   return (
-    <div className="dashboard-page">
+    <div className="app-page">
       <h1 className="page-title">Zones</h1>
       <p className="page-subtitle">Geofence definitions — click the map to draw a new zone</p>
 

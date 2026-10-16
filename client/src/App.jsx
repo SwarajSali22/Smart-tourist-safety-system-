@@ -4,8 +4,7 @@ import { AuthProvider } from './shared/auth/AuthContext.jsx';
 import { ThemeProvider } from './shared/theme/ThemeContext.jsx';
 import { ToastProvider } from './shared/components/ui/Toast.jsx';
 import ProtectedRoute  from './shared/components/ProtectedRoute.jsx';
-import AdminLayout     from './shared/components/AdminLayout.jsx';
-import TouristLayout   from './shared/components/TouristLayout.jsx';
+import AppShell        from './shared/layouts/AppShell.jsx';
 
 import Home             from './pages/Home.jsx';
 import Login            from './pages/Login.jsx';
@@ -45,7 +44,7 @@ function App() {
           path="/admin"
           element={
             <ProtectedRoute role="admin">
-              <AdminLayout />
+              <AppShell />
             </ProtectedRoute>
           }
         >
@@ -64,7 +63,7 @@ function App() {
           path="/tourist"
           element={
             <ProtectedRoute role="tourist">
-              <TouristLayout />
+              <AppShell />
             </ProtectedRoute>
           }
         >

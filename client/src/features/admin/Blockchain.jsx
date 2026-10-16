@@ -91,7 +91,7 @@ function Blockchain() {
   ];
 
   return (
-    <div className="dashboard-page">
+    <div className="app-page">
       <h1 className="page-title">Audit proofs</h1>
       <p className="page-subtitle">
         A tamper-evident SHA-256 hash-chain of every critical event. MongoDB stays the source of truth; these proofs show a record hasn’t changed since it was logged.

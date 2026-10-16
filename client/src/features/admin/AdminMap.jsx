@@ -112,7 +112,7 @@ function AdminMap() {
   }
 
   return (
-    <div className="dashboard-page dashboard-page--wide">
+    <div className="dashboard-page app-page app-page--wide">
       <h1 className="page-title">Live map</h1>
       <p className="page-subtitle">Every tourist, coloured by risk. Select one to see their route and replay it.</p>
 

@@ -1,8 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api, tokens } from '../../api/client.js';
 import { connectSocket } from '../socket/socket.js';
+import { useAuth } from '../auth/AuthContext.jsx';
 import { useToast } from '../components/ui/Toast.jsx';
-import { RISK_RANK } from '../utils/format.js';
+import { label, RISK_RANK } from '../utils/format.js';
 
 const AlertsContext = createContext(null);
 
@@ -31,16 +32,23 @@ function beep() {
   } catch { /* audio unavailable */ }
 }
 
+const isOpen = (e) => e && (e.status === 'active' || e.status === 'acknowledged');
+
 /**
- * Admin-wide live alert layer: listens for SOS, geofence violations, missed or
- * "unsafe" safety checks and risk escalations on every admin page; raises a
- * toast, an optional sound/desktop notification, and keeps a bell list + the
- * set of currently active SOS events for the persistent banner.
+ * Live alert layer shared by both roles (mounted once by AppShell).
+ *  - admin:   SOS, zone violations, missed / "unsafe" check-ins, risk escalations
+ *             on every page, plus the set of active SOS for the red banner.
+ *  - tourist: own zone alerts, check-in prompts, SOS progress, rising risk, plus
+ *             their own open SOS (banner) and the "you entered a zone" notice.
+ * Each event raises a toast and a bell entry; urgent ones may beep / notify.
  */
 export function AlertsProvider({ children }) {
+  const { user } = useAuth();
+  const role = user?.role;
   const toast = useToast();
   const [alerts, setAlerts] = useState([]);
   const [activeSos, setActiveSos] = useState([]);
+  const [zoneNotice, setZoneNotice] = useState(null);
   const [muted, setMuted] = useState(readMuted);
   const [desktopPermission, setDesktopPermission] = useState(
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission
@@ -63,65 +71,108 @@ export function AlertsProvider({ children }) {
   );
 
   useEffect(() => {
-    api.get('/sos')
-      .then((d) => setActiveSos((d.events || []).filter((e) => e.status === 'active' || e.status === 'acknowledged')))
-      .catch(() => {});
-
+    if (!role) return undefined;
     const socket = connectSocket(tokens.getAccess());
-    const isOpen = (e) => e.status === 'active' || e.status === 'acknowledged';
-    const upsert = (e) => setActiveSos((list) => {
+    const upsertSos = (e) => setActiveSos((list) => {
       const rest = list.filter((x) => x._id !== e._id);
       return isOpen(e) ? [e, ...rest] : rest;
     });
 
-    function onSos({ sosEvent }) {
-      upsert(sosEvent);
-      push('sos', 'SOS triggered', `${sosEvent.tourist?.name || 'A tourist'} needs help.`, { variant: 'danger', loud: true });
+    if (role === 'admin') {
+      api.get('/sos')
+        .then((d) => setActiveSos((d.events || []).filter(isOpen)))
+        .catch(() => {});
+
+      const onSos = ({ sosEvent }) => {
+        upsertSos(sosEvent);
+        push('sos', 'SOS triggered', `${sosEvent.tourist?.name || 'A tourist'} needs help.`, { variant: 'danger', loud: true });
+      };
+      const onSosUpdated = (sosEvent) => upsertSos(sosEvent);
+      const onViolation = (p) => push('geofence', 'Zone violation', `${p.tourist?.name || 'A tourist'} entered ${p.zone?.name || 'a restricted zone'}.`, { link: '/admin/zones', loud: p.zone?.type === 'danger' });
+      const onMissed = () => push('checkin', 'Missed check-in', 'A tourist did not answer a safety check in time.', { variant: 'warning', loud: true });
+      const onCheckResponse = ({ safetyCheck }) => {
+        if (safetyCheck?.response === 'unsafe') {
+          push('checkin', 'Tourist reported unsafe', 'A tourist answered “I need help” on a safety check.', { variant: 'danger', loud: true });
+        }
+      };
+      const onRisk = (r) => {
+        const id = r.tourist?._id || r.tourist;
+        const prev = riskSeen.current.get(id) ?? 0;
+        const rank = RISK_RANK[r.level];
+        riskSeen.current.set(id, rank);
+        if (rank >= RISK_RANK.high && rank > prev) {
+          push('risk', `Risk ${r.level}`, `${r.tourist?.name || 'A tourist'} reached ${r.level} risk (score ${r.score}).`, {
+            link: '/admin', variant: r.level === 'critical' ? 'danger' : 'warning', loud: r.level === 'critical',
+          });
+        }
+      };
+
+      socket.on('sos:triggered', onSos);
+      socket.on('sos:updated', onSosUpdated);
+      socket.on('geofence:violation', onViolation);
+      socket.on('safetycheck:missed', onMissed);
+      socket.on('safetycheck:response', onCheckResponse);
+      socket.on('risk:updated', onRisk);
+      return () => {
+        socket.off('sos:triggered', onSos);
+        socket.off('sos:updated', onSosUpdated);
+        socket.off('geofence:violation', onViolation);
+        socket.off('safetycheck:missed', onMissed);
+        socket.off('safetycheck:response', onCheckResponse);
+        socket.off('risk:updated', onRisk);
+      };
     }
-    function onSosUpdated(sosEvent) { upsert(sosEvent); }
-    function onViolation(p) {
-      push('geofence', 'Zone violation', `${p.tourist?.name || 'A tourist'} entered ${p.zone?.name || 'a restricted zone'}.`, { link: '/admin/zones', loud: p.zone?.type === 'danger' });
-    }
-    function onMissed() {
-      push('checkin', 'Missed check-in', 'A tourist did not answer a safety check in time.', { variant: 'warning', loud: true });
-    }
-    function onCheckResponse({ safetyCheck }) {
-      if (safetyCheck?.response === 'unsafe') {
-        push('checkin', 'Tourist reported unsafe', 'A tourist answered “I need help” on a safety check.', { variant: 'danger', loud: true });
-      }
-    }
-    function onRisk(r) {
-      const id = r.tourist?._id || r.tourist;
-      const prev = riskSeen.current.get(id) ?? 0;
+
+    // ── tourist ──
+    api.get('/sos/mine')
+      .then((d) => setActiveSos(isOpen(d.sosEvent) ? [d.sosEvent] : []))
+      .catch(() => {});
+
+    const onSos = (p) => { const e = p.sosEvent || p; upsertSos(e); };
+    const onSosUpdated = (e) => {
+      upsertSos(e);
+      if (e?.status === 'acknowledged') push('sos', 'Help is on the way', 'An admin has acknowledged your SOS and is responding.', { link: '/tourist/sos', variant: 'success' });
+      if (e?.status === 'resolved') push('sos', 'SOS resolved', 'Your SOS has been marked resolved.', { link: '/tourist/sos', variant: 'success' });
+    };
+    const onViolation = (p) => {
+      const name = p.zone?.name || 'a restricted area';
+      const danger = p.zone?.type === 'danger';
+      setZoneNotice({ name, danger });
+      push('geofence', 'Zone alert', `You have entered ${name}. ${danger ? 'This is a danger zone — move to safety.' : 'Please check the area rules.'}`, {
+        link: '/tourist/map', variant: danger ? 'danger' : 'warning', loud: danger,
+      });
+    };
+    const onPrompt = () => push('checkin', 'Safety check-in', 'Please open Check-ins and tell us you are safe.', { link: '/tourist/checks', variant: 'info', loud: true });
+    const onRisk = (r) => {
       const rank = RISK_RANK[r.level];
-      riskSeen.current.set(id, rank);
+      const prev = riskSeen.current.get('me') ?? 0;
+      riskSeen.current.set('me', rank);
       if (rank >= RISK_RANK.high && rank > prev) {
-        push('risk', `Risk ${r.level}`, `${r.tourist?.name || 'A tourist'} reached ${r.level} risk (score ${r.score}).`, {
-          link: '/admin', variant: r.level === 'critical' ? 'danger' : 'warning', loud: r.level === 'critical',
-        });
+        push('risk', 'Risk rising', `Your risk level is now ${label(r.level)}. Stay alert and consider moving to a safer area.`, { link: '/tourist', variant: 'warning' });
       }
-    }
+    };
 
     socket.on('sos:triggered', onSos);
     socket.on('sos:updated', onSosUpdated);
     socket.on('geofence:violation', onViolation);
-    socket.on('safetycheck:missed', onMissed);
-    socket.on('safetycheck:response', onCheckResponse);
+    socket.on('safetycheck:prompt', onPrompt);
     socket.on('risk:updated', onRisk);
     return () => {
       socket.off('sos:triggered', onSos);
       socket.off('sos:updated', onSosUpdated);
       socket.off('geofence:violation', onViolation);
-      socket.off('safetycheck:missed', onMissed);
-      socket.off('safetycheck:response', onCheckResponse);
+      socket.off('safetycheck:prompt', onPrompt);
       socket.off('risk:updated', onRisk);
     };
-  }, [push]);
+  }, [role, push]);
 
   const value = useMemo(
     () => ({
+      role,
       alerts,
       activeSos,
+      zoneNotice,
+      dismissZoneNotice: () => setZoneNotice(null),
       unreadCount: alerts.filter((a) => !a.read).length,
       muted,
       desktopPermission,
@@ -136,7 +187,7 @@ export function AlertsProvider({ children }) {
         setDesktopPermission(await Notification.requestPermission());
       },
     }),
-    [alerts, activeSos, muted, desktopPermission]
+    [role, alerts, activeSos, zoneNotice, muted, desktopPermission]
   );
 
   return <AlertsContext.Provider value={value}>{children}</AlertsContext.Provider>;

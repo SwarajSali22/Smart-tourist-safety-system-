@@ -16,10 +16,10 @@ function Analytics() {
     api.get('/analytics/overview').then(setData).catch((e) => setError(e.message));
   }, []);
 
-  if (error) return <div className="dashboard-page"><h1 className="page-title">Analytics</h1><p className="form-error" role="alert">{error}</p></div>;
+  if (error) return <div className="app-page"><h1 className="page-title">Analytics</h1><p className="form-error" role="alert">{error}</p></div>;
   if (!data) {
     return (
-      <div className="dashboard-page">
+      <div className="app-page">
         <h1 className="page-title">Analytics</h1>
         <SkeletonRows rows={8} />
       </div>
@@ -37,7 +37,7 @@ function Analytics() {
   }));
 
   return (
-    <div className="dashboard-page">
+    <div className="app-page">
       <h1 className="page-title">Analytics</h1>
       <p className="page-subtitle">Incident trends, risky areas and response times</p>
 

@@ -74,11 +74,11 @@ function TouristProfile() {
     }
   }
 
-  if (loading) return <div className="tourist-page"><SkeletonRows rows={6} /></div>;
-  if (error) return <div className="tourist-page"><p className="form-error" role="alert">{error}</p></div>;
+  if (loading) return <div className="app-page"><SkeletonRows rows={6} /></div>;
+  if (error) return <div className="app-page"><p className="form-error" role="alert">{error}</p></div>;
 
   return (
-    <div className="tourist-page">
+    <div className="app-page">
       <h1 className="page-title">My profile</h1>
 
       <Card title="Account details">

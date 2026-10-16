@@ -109,7 +109,7 @@ function Devices() {
   ];
 
   return (
-    <div className="dashboard-page">
+    <div className="app-page">
       <h1 className="page-title">Devices</h1>
       <p className="page-subtitle">Registered tracking devices (simulated until the ESP32 wristband is ready)</p>
 

@@ -76,7 +76,7 @@ function TouristHome() {
     : [];
 
   return (
-    <div className="tourist-page">
+    <div className="app-page">
       <h1 className="page-title">Hello, {user?.name}</h1>
 
       {isOpen && (

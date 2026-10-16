@@ -78,7 +78,7 @@ function TouristSOS() {
   const resolved = sosEvent?.status === 'resolved' || sosEvent?.status === 'false_alarm';
 
   return (
-    <div className="tourist-page">
+    <div className="app-page">
       <h1 className="page-title">Emergency SOS</h1>
 
       <Card>

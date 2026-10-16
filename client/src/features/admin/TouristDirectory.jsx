@@ -49,7 +49,7 @@ function TouristDirectory() {
   ];
 
   return (
-    <div className="dashboard-page">
+    <div className="app-page">
       <h1 className="page-title">Tourist directory</h1>
       <p className="page-subtitle">Click a name to find them on the live map.</p>
 

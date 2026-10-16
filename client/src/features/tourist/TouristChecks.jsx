@@ -58,7 +58,7 @@ function TouristChecks() {
   }
 
   return (
-    <div className="tourist-page">
+    <div className="app-page">
       <h1 className="page-title">Safety check-ins</h1>
 
       <Card>

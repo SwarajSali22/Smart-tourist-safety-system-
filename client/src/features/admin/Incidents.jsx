@@ -183,7 +183,7 @@ function Incidents() {
   }
 
   return (
-    <div className="dashboard-page">
+    <div className="app-page">
       <h1 className="page-title">Incidents</h1>
       <p className="page-subtitle">Unified case record for SOS and other escalations</p>
 

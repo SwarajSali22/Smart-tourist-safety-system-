@@ -90,7 +90,7 @@ function AdminHome() {
   ];
 
   return (
-    <div className="dashboard-page">
+    <div className="app-page">
       <h1 className="page-title">Welcome back, {user?.name}</h1>
       <p className="page-subtitle">
         Live overview · updated {timeAgo(lastUpdate, now)}

@@ -1,0 +1,88 @@
+/* Single source of truth for colours, radii, spacing, shadows and z-index.
+   Light values on :root, dark overrides on :root[data-theme='dark']. */
+/* ── Design tokens ──────────────────────────────────────────────────────────── */
+:root {
+  --color-primary:      #4f46e5;
+  --color-primary-dk:   #4338ca;
+  --color-primary-soft: #eef2ff;
+  --color-danger:       #dc2626;
+  --color-danger-dk:    #b91c1c;
+  --color-danger-soft:  #fef2f2;
+  --color-danger-border:#fecaca;
+  --color-success:      #16a34a;
+  --color-success-dk:   #15803d;
+  --color-success-soft: #f0fdf4;
+  --color-success-border:#bbf0cf;
+  --color-warning:      #b45309;
+  --color-warning-soft: #fffbeb;
+  --color-warning-border:#fde68a;
+  --color-neutral:      #64748b;
+  --color-neutral-soft: #f1f4f8;
+  --color-neutral-text: #475467;
+  --color-bg:           #f6f8fb;
+  --color-surface:      #ffffff;
+  --color-surface-2:    #f6f8fb;
+  --color-border:       #e5e9f0;
+  --color-border-strong:#d3d9e3;
+  --color-text:         #1a2233;
+  --color-text-muted:   #596273;
+  --color-placeholder:  #6b7686;
+  --color-link:         #4338ca;
+  --sidebar-w:          228px;
+  --radius:             10px;
+  --radius-sm:          7px;
+  --radius-lg:          14px;
+  --shadow-sm:          0 1px 2px rgba(16,24,40,.06);
+  --shadow:             0 1px 3px rgba(16,24,40,.08), 0 4px 12px rgba(16,24,40,.04);
+  --shadow-lg:          0 8px 24px rgba(16,24,40,.10), 0 2px 6px rgba(16,24,40,.06);
+  --overlay:            rgba(16,24,40,.45);
+
+  /* spacing scale */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px;
+
+  /* layout */
+  --topbar-h:           56px;
+  --bottom-nav-h:       64px;
+  --page-max:           1100px;
+  --page-max-wide:      1500px;
+  --page-pad:           28px 32px 40px;
+
+  /* z-index scale */
+  --z-topbar: 900;  --z-banner: 890;  --z-popover: 1100; --z-drawer: 1500;
+  --z-map-ui: 1000; --z-map-full: 2000; --z-modal: 3000; --z-toast: 4000;
+}
+
+:root[data-theme='dark'] {
+  --color-primary:      #818cf8;
+  --color-primary-dk:   #a5b4fc;
+  --color-primary-soft: #26285a;
+  --color-danger:       #ef4444;
+  --color-danger-dk:    #fca5a5;
+  --color-danger-soft:  #3b1618;
+  --color-danger-border:#6b2326;
+  --color-success:      #22c55e;
+  --color-success-dk:   #86efac;
+  --color-success-soft: #11301f;
+  --color-success-border:#1d5a37;
+  --color-warning:      #fbbf24;
+  --color-warning-soft: #33260a;
+  --color-warning-border:#6b4e10;
+  --color-neutral:      #94a3b8;
+  --color-neutral-soft: #232b3a;
+  --color-neutral-text: #b4bdcc;
+  --color-bg:           #0f1420;
+  --color-surface:      #171e2d;
+  --color-surface-2:    #1d2638;
+  --color-border:       #2a3447;
+  --color-border-strong:#3a465c;
+  --color-text:         #e7ebf3;
+  --color-text-muted:   #a3aec2;
+  --color-placeholder:  #8895ab;
+  --color-link:         #a5b4fc;
+  --shadow-sm:          0 1px 2px rgba(0,0,0,.4);
+  --shadow:             0 1px 3px rgba(0,0,0,.4), 0 4px 12px rgba(0,0,0,.25);
+  --shadow-lg:          0 8px 24px rgba(0,0,0,.5);
+  --overlay:            rgba(0,0,0,.6);
+}
+
