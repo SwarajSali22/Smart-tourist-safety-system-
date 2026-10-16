@@ -42,7 +42,7 @@ function SosBanner({ role }) {
         {activeSos.length > 1 ? ` and ${activeSos.length - 1} more` : ''}
         {unacked.length > 0 ? ` (${unacked.length} awaiting acknowledgement)` : ' (all acknowledged)'}
       </span>
-      <Link to="/admin/incidents" className="btn btn--sm sos-banner__btn">Respond</Link>
+      <Link to={activeSos.length === 1 && activeSos[0].incident ? `/admin/incidents/${activeSos[0].incident._id || activeSos[0].incident}` : '/admin/incidents?type=sos&active=1'} className="btn btn--sm sos-banner__btn">Respond</Link>
     </div>
   );
 }

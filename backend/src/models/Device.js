@@ -34,6 +34,7 @@ const deviceSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isDemo: { type: Boolean, default: false },
     emergencyMode: {
       type: Boolean,
       default: false,

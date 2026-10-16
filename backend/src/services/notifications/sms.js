@@ -56,7 +56,7 @@ async function notifyEmergencyContacts({ touristId, sosEvent }) {
         await Notification.create({ ...record, delivered: true, deliveredAt: new Date() });
       } catch (err) {
         await Notification.create({ ...record, delivered: false, error: err.message });
-        console.error('[sms] failed for', contact.name, err.message);
+        console.error('[sms] delivery failed:', err.message);
       }
     }
   } catch (err) {

@@ -12,6 +12,7 @@ const riskRoutes = require('./risk.routes');
 const blockchainRoutes = require('./blockchain.routes');
 const analyticsRoutes = require('./analytics.routes');
 const statsRoutes = require('./stats.routes');
+const notificationRoutes = require('./notification.routes');
 
 const router = express.Router();
 
@@ -28,5 +29,6 @@ router.use('/risk', riskRoutes);
 router.use('/blockchain', blockchainRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/stats', statsRoutes);
+router.use('/notifications', notificationRoutes);
 
 module.exports = router;

@@ -1,6 +1,11 @@
 const LABELS = {
+  // incident lifecycle (stored: open = New, in_progress = Acknowledged)
+  open: 'New',
+  in_progress: 'Acknowledged',
+  assigned: 'Assigned',
+  en_route: 'En route',
+  closed: 'Closed',
   no_response: 'No response',
-  in_progress: 'In progress',
   risk_escalation: 'Risk escalation',
   geofence_violation: 'Geofence violation',
   false_alarm: 'False alarm',
@@ -56,7 +61,7 @@ export const FACTOR_LABELS = {
 };
 
 /** Where a tourist's position comes from: their phone's GPS or the wristband/simulator. */
-export const sourceLabel = (device) => (device?.type === 'phone' ? 'Phone' : 'Wristband');
+export { sourceOf as sourceLabel } from './freshness.js';
 
 /** A device with no telemetry for this long is shown as possibly offline. */
 export const STALE_MS = 5 * 60 * 1000;

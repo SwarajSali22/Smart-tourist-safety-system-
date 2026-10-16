@@ -1,289 +1,204 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { MapPin, ShieldCheck, Siren } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { MapPin, Siren } from 'lucide-react';
 import { api, tokens } from '../../api/client.js';
 import { connectSocket } from '../../shared/socket/socket.js';
 import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
+import { useNow } from '../../shared/hooks/useNow.js';
 import { useToast } from '../../shared/components/ui/Toast.jsx';
 import Card from '../../shared/components/ui/Card.jsx';
 import Badge from '../../shared/components/ui/Badge.jsx';
 import DataTable from '../../shared/components/ui/DataTable.jsx';
-import ConfirmDialog from '../../shared/components/ui/ConfirmDialog.jsx';
+import ErrorState from '../../shared/components/ui/ErrorState.jsx';
 import { SkeletonRows } from '../../shared/components/ui/Skeleton.jsx';
-import { ProofBadge, ProofChecks } from '../../shared/components/ProofStatus.jsx';
-import { formatDateTime, label } from '../../shared/utils/format.js';
+import { incidentOverdue } from '../../shared/utils/freshness.js';
+import { formatDateTime, label, timeAgo } from '../../shared/utils/format.js';
 
-const SEVERITY_BADGE = { low: 'neutral', medium: 'info', high: 'warning', critical: 'danger' };
-const STATUS_BADGE = { open: 'danger', in_progress: 'warning', resolved: 'success', closed: 'neutral' };
+export const SEVERITY_BADGE = { low: 'neutral', medium: 'info', high: 'warning', critical: 'danger' };
+export const STATUS_BADGE = { open: 'danger', in_progress: 'warning', assigned: 'info', en_route: 'info', resolved: 'success', closed: 'neutral' };
 
+const PAGE_SIZE = 15;
+const STATUS_OPTIONS = [
+  ['', 'All statuses'], ['active', 'Active (not resolved)'], ['open', 'New'], ['in_progress', 'Acknowledged'],
+  ['assigned', 'Assigned'], ['en_route', 'En route'], ['resolved', 'Resolved'], ['closed', 'Closed'],
+];
+const TYPE_OPTIONS = [['', 'All types'], ['sos', 'SOS'], ['geofence_violation', 'Zone violation'], ['no_response', 'Missed check-in'], ['risk_escalation', 'Risk escalation'], ['other', 'Other']];
+
+/**
+ * Incident list. Search, filters, sorting and pagination all run on the SERVER
+ * (GET /api/incidents) and live in the URL, so a filtered view can be linked to
+ * (the dashboard cards do exactly that) and survives a reload.
+ */
 function Incidents() {
   const toast = useToast();
   const navigate = useNavigate();
-  const [incidents, setIncidents] = useState([]);
+  const now = useNow(30000);
+  const [params, setParams] = useSearchParams();
+
+  const q = params.get('q') || '';
+  const active = params.get('active') === '1';
+  const statusParam = params.get('status') || '';
+  const statusValue = active ? 'active' : statusParam;
+  const severity = params.get('severity') || '';
+  const type = params.get('type') || '';
+  const sort = params.get('sort') || 'createdAt';
+  const order = params.get('order') || 'desc';
+  const page = Math.max(1, Number(params.get('page')) || 1);
+
+  const [qInput, setQInput] = useState(q);
+  const [data, setData] = useState(null); // { incidents, total, pages }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [expandedId, setExpandedId] = useState(null);
-  const [busyId, setBusyId] = useState(null);
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [severityFilter, setSeverityFilter] = useState('all');
 
-  const [resolving, setResolving] = useState(null);
-  const [note, setNote] = useState('');
+  const setParam = useCallback((changes) => {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      Object.entries(changes).forEach(([k, v]) => { if (v === '' || v == null) next.delete(k); else next.set(k, v); });
+      if (!('page' in changes)) next.delete('page'); // any filter change goes back to page 1
+      return next;
+    }, { replace: true });
+  }, [setParams]);
 
-  const [proofs, setProofs] = useState({});    // incidentId -> proof[]
-  const [verified, setVerified] = useState({}); // proofId -> verify result
-  const [verifyingId, setVerifyingId] = useState(null);
-
+  // Debounce the search box into the URL.
   useEffect(() => {
-    api.get('/incidents')
-      .then((data) => setIncidents(data.incidents || []))
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, []);
+    const id = setTimeout(() => { if (qInput !== q) setParam({ q: qInput }); }, 350);
+    return () => clearTimeout(id);
+  }, [qInput, q, setParam]);
 
+  const queryString = useMemo(() => {
+    const sp = new URLSearchParams();
+    if (q) sp.set('q', q);
+    if (active) sp.set('active', '1'); else if (statusParam) sp.set('status', statusParam);
+    if (severity) sp.set('severity', severity);
+    if (type) sp.set('type', type);
+    sp.set('sort', sort); sp.set('order', order); sp.set('page', String(page)); sp.set('limit', String(PAGE_SIZE));
+    return sp.toString();
+  }, [q, active, statusParam, severity, type, sort, order, page]);
+
+  const load = useCallback(() => {
+    return api.get(`/incidents?${queryString}`)
+      .then((d) => { setData(d); setError(''); })
+      .catch((e) => setError(e.message || 'Could not load incidents'))
+      .finally(() => setLoading(false));
+  }, [queryString]);
+
+  useEffect(() => { setLoading(true); load(); }, [load]);
+
+  // Live: any incident change → refetch the current page (debounced), so server-side filters stay correct.
+  const timer = useRef(null);
   useEffect(() => {
     const socket = connectSocket(tokens.getAccess());
-    function upsert(incident) {
-      setIncidents((is) => {
-        const exists = is.some((i) => i._id === incident._id);
-        return exists ? is.map((i) => (i._id === incident._id ? incident : i)) : [incident, ...is];
-      });
-    }
-    function onTriggered({ incident }) {
-      upsert(incident);
-    }
-    socket.on('incident:updated', upsert);
-    socket.on('sos:triggered', onTriggered);
-    return () => {
-      socket.off('incident:updated', upsert);
-      socket.off('sos:triggered', onTriggered);
-    };
-  }, []);
+    const refresh = () => { clearTimeout(timer.current); timer.current = setTimeout(load, 400); };
+    socket.on('incident:updated', refresh);
+    socket.on('sos:triggered', refresh);
+    return () => { socket.off('incident:updated', refresh); socket.off('sos:triggered', refresh); clearTimeout(timer.current); };
+  }, [load]);
+  useOnReconnect(load);
 
-  useOnReconnect(() => {
-    api.get('/incidents').then((d) => setIncidents(d.incidents || [])).catch(() => {});
-  });
-
-  // Optimistic update: show the new state immediately and restore the previous
-  // one if the request fails. A socket update replaces the row (dropping
-  // _pending), so a late failure never overwrites newer server state.
-  function applyOptimistic(id, patch) {
-    const prev = incidents.find((i) => i._id === id);
-    setIncidents((is) => is.map((i) => (i._id === id ? { ...i, ...patch, _pending: true } : i)));
-    return () => setIncidents((is) => is.map((i) => (i._id === id && i._pending ? prev : i)));
-  }
-
-  async function handleAcknowledge(incident) {
-    setBusyId(incident._id);
-    const rollback = applyOptimistic(incident._id, {
-      status: 'in_progress',
-      timeline: [...incident.timeline, { actorLabel: 'admin', action: 'Incident acknowledged', at: new Date().toISOString() }],
-    });
+  async function acknowledge(incident) {
+    // Optimistic: show Acknowledged now, roll back (and say why) if the server refuses.
+    const prev = data.incidents;
+    setData((d) => ({ ...d, incidents: d.incidents.map((i) => (i._id === incident._id ? { ...i, status: 'in_progress', _pending: true } : i)) }));
     try {
       await api.patch(`/incidents/${incident._id}/acknowledge`, {});
-      toast.success(`Acknowledged — ${incident.tourist?.name || 'tourist'} has been told help is responding.`);
+      toast.success(`Acknowledged — ${incident.tourist?.name || 'the tourist'} has been told help is responding.`);
+      load();
     } catch (err) {
-      rollback();
+      setData((d) => ({ ...d, incidents: d.incidents.map((i) => (i._id === incident._id && i._pending ? prev.find((p) => p._id === incident._id) : i)) }));
       toast.error(`Couldn’t acknowledge: ${err.message || 'request failed'}. The incident was restored.`);
-    } finally {
-      setBusyId(null);
     }
   }
 
-  async function confirmResolve() {
-    const incident = resolving;
-    const resolution = note.trim();
-    setResolving(null); // close right away — the table already shows it resolved
-    setNote('');
-    setBusyId(incident._id);
-    const rollback = applyOptimistic(incident._id, {
-      status: 'resolved',
-      resolution: resolution || null,
-      resolvedAt: new Date().toISOString(),
-      timeline: [...incident.timeline, { actorLabel: 'admin', action: 'Incident resolved', at: new Date().toISOString() }],
-    });
-    try {
-      await api.patch(`/incidents/${incident._id}/resolve`, { resolution: resolution || undefined });
-      toast.success('Incident resolved and recorded on the audit chain.');
-      setProofs((p) => { const next = { ...p }; delete next[incident._id]; return next; });
-    } catch (err) {
-      rollback();
-      toast.error(`Couldn’t resolve: ${err.message || 'request failed'}. The incident was restored.`);
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  function toggleExpand(row) {
-    const next = expandedId === row._id ? null : row._id;
-    setExpandedId(next);
-    if (next && !proofs[next]) {
-      api.get(`/blockchain/incident/${next}`)
-        .then((d) => setProofs((p) => ({ ...p, [next]: d.proofs || [] })))
-        .catch(() => setProofs((p) => ({ ...p, [next]: [] })));
-    }
-  }
-
-  async function verify(proofId) {
-    setVerifyingId(proofId);
-    try {
-      const d = await api.get(`/blockchain/verify/${proofId}`);
-      setVerified((v) => ({ ...v, [proofId]: d.result }));
-    } catch (err) {
-      toast.error(err.message || 'Verification failed');
-    } finally {
-      setVerifyingId(null);
-    }
-  }
-
-  const filtered = incidents.filter(
-    (i) => (statusFilter === 'all' || i.status === statusFilter) && (severityFilter === 'all' || i.severity === severityFilter)
-  );
+  const rows = data?.incidents || [];
+  const filtered = Boolean(q || statusValue || severity || type);
+  const clearFilters = () => { setQInput(''); setParams({}, { replace: true }); };
 
   const columns = [
-    { key: 'tourist', header: 'Tourist', sortValue: (i) => i.tourist?.name?.toLowerCase() ?? '', render: (i) => i.tourist?.name || '—' },
-    { key: 'type', header: 'Type', sortValue: (i) => i.type, render: (i) => label(i.type) },
-    { key: 'severity', header: 'Severity', sortValue: (i) => ['low', 'medium', 'high', 'critical'].indexOf(i.severity), render: (i) => <Badge variant={SEVERITY_BADGE[i.severity]}>{label(i.severity)}</Badge> },
-    { key: 'status', header: 'Status', sortValue: (i) => i.status, render: (i) => <Badge variant={STATUS_BADGE[i.status]}>{label(i.status)}</Badge> },
-    { key: 'createdAt', header: 'Created', sortValue: (i) => new Date(i.createdAt).getTime(), render: (i) => formatDateTime(i.createdAt) },
+    { key: 'tourist', header: 'Tourist', render: (i) => (
+      <span>{i.tourist?.name || '—'}{i.tourist?.isDemo && <> <Badge variant="info">Simulated</Badge></>}</span>
+    ) },
+    { key: 'type', header: 'Type', sortKey: 'type', render: (i) => label(i.type) },
+    { key: 'severity', header: 'Severity', sortKey: 'severity', render: (i) => <Badge variant={SEVERITY_BADGE[i.severity]}>{label(i.severity)}</Badge> },
+    { key: 'status', header: 'Status', sortKey: 'status', render: (i) => (
+      <span className="badge-row">
+        <Badge variant={STATUS_BADGE[i.status]}>{label(i.status)}</Badge>
+        {incidentOverdue(i, now) && <span className="badge badge--overdue" title="Sitting in this state longer than the target">Overdue</span>}
+      </span>
+    ) },
+    { key: 'assignee', header: 'Assigned to', render: (i) => i.assignedAdmin?.name || '—' },
+    { key: 'createdAt', header: 'Created', sortKey: 'createdAt', render: (i) => <time dateTime={i.createdAt} title={formatDateTime(i.createdAt)}>{timeAgo(i.createdAt, now)}</time> },
     {
       key: 'actions', header: <span className="sr-only">Actions</span>,
       render: (i) => (
-          <div className="contact-actions" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-            {i.tourist?._id && (
-              <button className="btn btn--ghost btn--sm" onClick={() => navigate(`/admin/map?tourist=${i.tourist._id}`)} aria-label={`Show ${i.tourist.name || 'tourist'} on the map`}>
-                <MapPin size={14} aria-hidden="true" /> Map
-              </button>
-            )}
-            {i.status === 'open' && (
-              <button className="btn btn--ghost btn--sm" disabled={busyId === i._id} onClick={() => handleAcknowledge(i)}>
-                Acknowledge
-              </button>
-            )}
-            {(i.status === 'open' || i.status === 'in_progress') && (
-              <button className="btn btn--primary btn--sm" disabled={busyId === i._id} onClick={() => { setResolving(i); setNote(''); }}>
-                Resolve
-              </button>
-            )}
-          </div>
-        ),
+        <div className="contact-actions" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+          {i.tourist?._id && (
+            <button className="btn btn--ghost btn--sm" onClick={() => navigate(`/admin/map?tourist=${i.tourist._id}`)} aria-label={`Show ${i.tourist.name || 'tourist'} on the map`}>
+              <MapPin size={14} aria-hidden="true" /> Map
+            </button>
+          )}
+          {i.status === 'open' && (
+            <button className="btn btn--ghost btn--sm" disabled={i._pending} onClick={() => acknowledge(i)}>Acknowledge</button>
+          )}
+          <Link className="btn btn--primary btn--sm" to={`/admin/incidents/${i._id}`}>Open</Link>
+        </div>
+      ),
     },
   ];
 
-  function renderExpanded(i) {
-    const list = proofs[i._id];
-    return (
-      <div className="incident-detail">
-        <div>
-          <h4 className="detail-heading">Timeline</h4>
-          <ul className="timeline-list">
-            {i.timeline.map((t, idx) => (
-              <li key={idx}>
-                <strong>{t.actorLabel}</strong> — {t.action}{' '}
-                <span className="form-hint">{formatDateTime(t.at)}</span>
-              </li>
-            ))}
-          </ul>
-          {i.resolution && <p className="form-hint">Resolution note: {i.resolution}</p>}
-        </div>
-        <div>
-          <h4 className="detail-heading"><ShieldCheck size={14} aria-hidden="true" /> Audit proofs</h4>
-          {list === undefined ? (
-            <p className="placeholder-text">Loading proofs…</p>
-          ) : list.length === 0 ? (
-            <p className="placeholder-text">No audit proofs recorded for this incident (it predates the audit chain).</p>
-          ) : (
-            <ul className="proof-list">
-              {list.map((p) => (
-                <li key={p._id}>
-                  <div className="status-row">
-                    <span>
-                      <strong>#{p.chainRef.sequenceNo}</strong> {label(p.eventType)}
-                      <small className="form-hint block"><code>{p.dataHash.slice(0, 16)}…</code></small>
-                    </span>
-                    <span className="badge-row">
-                      <ProofBadge result={verified[p._id]} />
-                      <button className="btn btn--ghost btn--sm" disabled={verifyingId === p._id} onClick={() => verify(p._id)}>
-                        {verifyingId === p._id ? 'Checking…' : 'Verify'}
-                      </button>
-                    </span>
-                  </div>
-                  <ProofChecks result={verified[p._id]} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-    );
-  }
+  const select = (value, onChange, options, aria) => (
+    <label className="filter">
+      <span className="sr-only">{aria}</span>
+      <select className="form-input" value={value} onChange={(e) => onChange(e.target.value)} aria-label={aria}>
+        {options.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
+      </select>
+    </label>
+  );
 
   return (
     <div className="app-page">
       <h1 className="page-title">Incidents</h1>
-      <p className="page-subtitle">Unified case record for SOS and other escalations</p>
-
-      {error && <p className="form-error" role="alert">{error}</p>}
+      <p className="page-subtitle">Every escalation, from first alert to closure. Click a row for the full case.</p>
 
       <Card>
-        {loading ? (
+        {loading && !data ? (
           <SkeletonRows rows={6} />
+        ) : error && !data ? (
+          <ErrorState message={error} onRetry={() => { setLoading(true); load(); }} />
         ) : (
-          <DataTable
-            columns={columns}
-            rows={filtered}
-            searchText={(i) => `${i.tourist?.name || ''} ${label(i.type)} ${i.severity} ${i.status}`}
-            searchLabel="Search incidents"
-            toolbar={
-              <div className="filter-row">
-                <label className="filter">
-                  <span className="sr-only">Filter by status</span>
-                  <select className="form-input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filter by status">
-                    <option value="all">All statuses</option>
-                    <option value="open">Open</option>
-                    <option value="in_progress">In progress</option>
-                    <option value="resolved">Resolved</option>
-                    <option value="closed">Closed</option>
-                  </select>
-                </label>
-                <label className="filter">
-                  <span className="sr-only">Filter by severity</span>
-                  <select className="form-input" value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)} aria-label="Filter by severity">
-                    <option value="all">All severities</option>
-                    <option value="critical">Critical</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
-                  </select>
-                </label>
-              </div>
-            }
-            emptyIcon={Siren}
-            emptyTitle="No incidents yet"
-            emptyText="SOS presses, missed check-ins and risk escalations will be tracked here."
-            emptyAction={<Link className="btn btn--ghost btn--sm" to="/admin/map">Open the live map</Link>}
-            onRowClick={toggleExpand}
-            expandedId={expandedId}
-            renderExpanded={renderExpanded}
-            caption="Incidents. Select a row to expand its timeline and audit proofs."
-          />
+          <>
+            {error && <ErrorState compact message={`${error} Showing the last data we had.`} onRetry={load} />}
+            <DataTable
+              manual
+              columns={columns}
+              rows={rows}
+              toolbar={
+                <div className="filter-row">
+                  <label className="search-box">
+                    <span className="sr-only">Search incidents</span>
+                    <input type="search" value={qInput} onChange={(e) => setQInput(e.target.value)} placeholder="Search tourist, email or type" aria-label="Search incidents" />
+                  </label>
+                  {select(statusValue, (v) => (v === 'active' ? setParam({ active: '1', status: '' }) : setParam({ status: v, active: '' })), STATUS_OPTIONS, 'Filter by status')}
+                  {select(severity, (v) => setParam({ severity: v }), [['', 'All severities'], ['critical', 'Critical'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']], 'Filter by severity')}
+                  {select(type, (v) => setParam({ type: v }), TYPE_OPTIONS, 'Filter by type')}
+                  {filtered && <button type="button" className="btn btn--ghost btn--sm" onClick={clearFilters}>Clear filters</button>}
+                </div>
+              }
+              sort={{ key: sort, dir: order }}
+              onSort={(key) => setParam({ sort: key, order: sort === key && order === 'desc' ? 'asc' : 'desc' })}
+              pagination={{ page, pages: data?.pages || 1, total: data?.total || 0, pageSize: PAGE_SIZE, onPage: (p) => setParam({ page: String(p) }) }}
+              onRowClick={(row) => navigate(`/admin/incidents/${row._id}`)}
+              emptyIcon={Siren}
+              emptyTitle={filtered ? 'No incidents match these filters' : 'No incidents yet'}
+              emptyText={filtered ? 'Try widening the search or clearing the filters.' : 'SOS presses, missed check-ins and risk escalations will be tracked here.'}
+              emptyAction={filtered
+                ? <button type="button" className="btn btn--ghost btn--sm" onClick={clearFilters}>Clear filters</button>
+                : <Link className="btn btn--ghost btn--sm" to="/admin/map">Open the live map</Link>}
+              caption="Incidents. Select a row to open the case."
+              rowKey={(i) => i._id}
+            />
+          </>
         )}
       </Card>
-
-      <ConfirmDialog
-        open={Boolean(resolving)}
-        title="Resolve incident"
-        message={resolving ? `Mark ${resolving.tourist?.name || 'this tourist'}’s ${label(resolving.type).toLowerCase()} incident as resolved. If it was an SOS, the wristband’s emergency mode is cleared.` : ''}
-        confirmLabel="Resolve"
-        busy={busyId === resolving?._id}
-        onConfirm={confirmResolve}
-        onCancel={() => setResolving(null)}
-      >
-        <label className="form-label modal__form">
-          Resolution note (optional)
-          <textarea className="form-input" rows={3} value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} placeholder="What happened and what was done?" />
-        </label>
-      </ConfirmDialog>
     </div>
   );
 }

@@ -62,7 +62,7 @@ async function listDevices(req, res, next) {
   try {
     const devices = await Device.find()
       .select('-apiKeyHash')
-      .populate('tourist', 'name email')
+      .populate('tourist', 'name email isDemo')
       .sort({ lastSeen: -1 })
       .lean();
 
@@ -77,7 +77,7 @@ async function getDevice(req, res, next) {
   try {
     const device = await Device.findOne({ deviceId: req.params.deviceId })
       .select('-apiKeyHash')
-      .populate('tourist', 'name email')
+      .populate('tourist', 'name email isDemo')
       .lean();
 
     if (!device) {

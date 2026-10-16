@@ -1,13 +1,26 @@
-import { ShieldAlert, ShieldCheck } from 'lucide-react';
+import { ShieldAlert, ShieldCheck, ShieldQuestion, ShieldX } from 'lucide-react';
 
-/** Verified ✓ / Tampered ✗ result badge — icon + text, never colour alone. */
+/**
+ * Result badge — icon + text, never colour alone.
+ *  Verified — hash and chain match the live record
+ *  Modified — the record (or its proof) changed after it was hashed
+ *  Missing  — the source record no longer exists
+ *  Failed   — the check itself could not run (not a verdict on the record)
+ */
+const PROOF_BADGES = {
+  verified: ['badge--success', ShieldCheck, 'Verified'],
+  modified: ['badge--danger', ShieldAlert, 'Modified'],
+  missing: ['badge--danger', ShieldX, 'Missing'],
+  failed: ['badge--warning', ShieldQuestion, 'Check failed'],
+};
+
 export function ProofBadge({ result }) {
   if (!result) return <span className="badge badge--neutral">Not checked</span>;
-  const ok = result.status === 'verified';
+  const [cls, Icon, text] = PROOF_BADGES[result.status] || PROOF_BADGES.failed;
   return (
-    <span className={`badge ${ok ? 'badge--success' : 'badge--danger'}`}>
-      {ok ? <ShieldCheck size={13} aria-hidden="true" /> : <ShieldAlert size={13} aria-hidden="true" />}
-      {ok ? 'Verified' : 'Tampered'}
+    <span className={`badge ${cls}`}>
+      <Icon size={13} aria-hidden="true" />
+      {text}
     </span>
   );
 }

@@ -46,6 +46,7 @@ const zoneSchema = new mongoose.Schema(
       ref: 'User',
       default: null,
     },
+    isDemo: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

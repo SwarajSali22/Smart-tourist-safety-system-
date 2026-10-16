@@ -25,13 +25,15 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['tourist', 'admin'],
+      enum: ['tourist', 'admin', 'responder'],
       required: true,
     },
     isActive: {
       type: Boolean,
       default: true,
     },
+    // Seeded by scripts/demoScenarios.js; removed by scripts/demoReset.js. Shown as "Simulated" in the UI.
+    isDemo: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

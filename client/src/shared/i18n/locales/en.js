@@ -102,7 +102,7 @@ export default {
   'home.map.open': 'Open map',
   'home.sos.title': 'SOS',
   'home.sos.yours': 'Your SOS is',
-  'home.sos.hint': 'Press in an emergency to alert an admin and your emergency contacts immediately.',
+  'home.sos.hint': 'Press in an emergency to alert an admin right away. Your emergency contacts are also texted if SMS alerts are set up.',
   'home.sos.open': 'Open SOS',
   'home.sos.viewStatus': 'View SOS status',
 
@@ -210,4 +210,19 @@ export default {
   'profile.trip.saved': 'Itinerary saved.',
   'profile.trip.badDates': 'Stop {n}: departure is before arrival.',
   'profile.trip.error': 'Could not save itinerary',
+
+  // ── notifications (persistent) ──
+  'alert.assigned.title': 'A responder was assigned',
+  'alert.assigned.body': 'Someone has been assigned to help you.',
+  'alert.enroute.title': 'Help is on the way',
+  'alert.enroute.body': 'A responder is heading to your location.',
+  'alert.safety.title': 'Your safety level changed',
+  'alert.safety.risk': 'Your risk level is elevated. Stay alert and consider moving to a safer area.',
+  'alert.safety.noresponse': 'A safety check-in went unanswered. If you are safe, open the app and respond.',
+  'notif.title': 'Notifications',
+  'notif.empty': 'No notifications yet.',
+  'notif.unread': 'Unread',
+  'notif.all': 'All',
+  'notif.markAll': 'Mark all as read',
+  'notif.open': 'Open',
 };

@@ -19,7 +19,7 @@ async function connectDB() {
   }
 
   try {
-    await mongoose.connect(env.mongoUri);
+    await mongoose.connect(env.mongoUri, env.mongoDbName ? { dbName: env.mongoDbName } : undefined);
     console.log('[db] MongoDB connected');
   } catch (err) {
     console.error('[db] MongoDB connection error:', err.message);

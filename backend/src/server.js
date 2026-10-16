@@ -8,6 +8,7 @@ const app = require('./app');
 const connectDB = require('./config/db');
 const env = require('./config/env');
 const { initSocket } = require('./sockets');
+const { setIo } = require('./services/realtime');
 const { startSafetyCheckScheduler } = require('./jobs/safetyCheckScheduler');
 
 async function start() {
@@ -16,6 +17,7 @@ async function start() {
   const httpServer = http.createServer(app);
   const io = initSocket(httpServer);
   app.set('io', io);
+  setIo(io);
   startSafetyCheckScheduler(io);
 
   httpServer.listen(env.port, () => {

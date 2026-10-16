@@ -80,7 +80,7 @@ async function processTelemetry({ device, lat, lng, battery, accuracy, sosPresse
 
   if (io) {
     const touristId = device.tourist?.toString();
-    await device.populate('tourist', 'name email');
+    await device.populate('tourist', 'name email isDemo');
     const deviceUpdate = toSafeDevice(device);
 
     io.to('admin').emit('location:update', deviceUpdate);

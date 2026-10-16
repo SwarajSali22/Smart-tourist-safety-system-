@@ -9,7 +9,8 @@ import Card from '../../shared/components/ui/Card.jsx';
 import Badge from '../../shared/components/ui/Badge.jsx';
 import DataTable from '../../shared/components/ui/DataTable.jsx';
 import { SkeletonRows } from '../../shared/components/ui/Skeleton.jsx';
-import { label, sourceLabel, STALE_MS, timeAgo } from '../../shared/utils/format.js';
+import { label, timeAgo } from '../../shared/utils/format.js';
+import { FRESH_LABEL, FRESH_VARIANT, freshnessOf, sourceOf } from '../../shared/utils/freshness.js';
 
 const STATUS_VARIANT = {
   active: 'success',
@@ -97,16 +98,16 @@ function Devices() {
 
   const columns = [
     { key: 'deviceId', header: 'Device ID', sortValue: (d) => d.deviceId },
-    { key: 'type', header: 'Source', sortValue: (d) => sourceLabel(d), render: (d) => <Badge variant="neutral">{sourceLabel(d)}</Badge> },
+    { key: 'type', header: 'Source', sortValue: (d) => sourceOf(d), render: (d) => <Badge variant={sourceOf(d) === 'Simulator' ? 'info' : 'neutral'}>{sourceOf(d)}</Badge> },
     { key: 'tourist', header: 'Tourist', sortValue: (d) => d.tourist?.name?.toLowerCase() ?? '', render: (d) => (d.tourist ? `${d.tourist.name} (${d.tourist.email})` : '—') },
     {
       key: 'status', header: 'Status', sortValue: (d) => d.status,
       render: (d) => {
-        const stale = d.status === 'active' && d.lastSeen && now - new Date(d.lastSeen).getTime() > STALE_MS;
+        const fresh = freshnessOf(d.lastSeen, now);
         return (
           <span className="badge-row">
             <Badge variant={STATUS_VARIANT[d.status] || 'neutral'}>{label(d.status)}</Badge>
-            {stale && <Badge variant="warning">Silent</Badge>}
+            <Badge variant={FRESH_VARIANT[fresh]}>{FRESH_LABEL[fresh]}</Badge>
           </span>
         );
       },
@@ -119,7 +120,7 @@ function Devices() {
   return (
     <div className="app-page">
       <h1 className="page-title">Devices</h1>
-      <p className="page-subtitle">Registered tracking devices (simulated until the ESP32 wristband is ready)</p>
+      <p className="page-subtitle">Phones, wristbands and simulators. “Simulator” devices are not real hardware; data older than 2 minutes is marked Stale, older than 15 minutes Offline.</p>
 
       <Card id="register-device" title="Register a device" className="mt-4">
         {issuedKey && (

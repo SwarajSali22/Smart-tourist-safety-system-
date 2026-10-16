@@ -22,7 +22,15 @@ async function triggerSos({ tourist, device, location, source, io }) {
   });
   if (existing) throw new SosAlreadyActiveError();
 
-  const sosEvent = await SOSEvent.create({ tourist, device, location, source, status: 'active' });
+  let sosEvent;
+  try {
+    // activeKey + the unique sparse index guarantee one active SOS per tourist even
+    // when two triggers race past the check above.
+    sosEvent = await SOSEvent.create({ tourist, device, location, source, status: 'active', activeKey: String(tourist) });
+  } catch (err) {
+    if (err.code === 11000) throw new SosAlreadyActiveError();
+    throw err;
+  }
 
   const incident = await Incident.create({
     tourist,

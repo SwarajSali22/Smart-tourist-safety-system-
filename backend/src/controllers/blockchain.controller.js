@@ -20,7 +20,14 @@ async function listProofs(req, res, next) {
 // ── GET /api/blockchain/verify/:proofId  (admin) ─────────────────────────────
 async function verifyOne(req, res, next) {
   try {
-    const result = await verifyProof(req.params.proofId);
+    let result;
+    try {
+      result = await verifyProof(req.params.proofId);
+    } catch (err) {
+      // The check itself could not run (database error …) — say so rather than guessing.
+      console.error('[audit] verify failed:', err.message);
+      return res.json({ success: true, result: { proofId: req.params.proofId, status: 'failed', message: 'The verification could not be completed. Try again.' } });
+    }
     if (!result) return res.status(404).json({ success: false, message: 'Proof not found' });
     return res.json({ success: true, result });
   } catch (err) {

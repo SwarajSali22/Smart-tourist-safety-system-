@@ -31,6 +31,16 @@ const notificationSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: {},
     },
+    // In-app notification content (the `payload` above carries machine-readable context)
+    title: { type: String, default: null },
+    message: { type: String, default: null },
+    link: { type: String, default: null },        // deep link inside the app, e.g. /admin/incidents/<id>
+    severity: { type: String, enum: ['info', 'warning', 'critical'], default: 'info' },
+    read: { type: Boolean, default: false },
+    readAt: { type: Date, default: null },
+    isDemo: { type: Boolean, default: false },    // came from a simulated tourist
+    // Idempotency: one notification per (source event, recipient)
+    dedupeKey: { type: String, default: undefined },
     acknowledged: {
       type: Boolean,
       default: false,
@@ -58,5 +68,7 @@ const notificationSchema = new mongoose.Schema(
 
 notificationSchema.index({ recipient: 1, createdAt: -1 });
 notificationSchema.index({ acknowledged: 1 });
+notificationSchema.index({ recipient: 1, read: 1, createdAt: -1 });
+notificationSchema.index({ dedupeKey: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('Notification', notificationSchema);

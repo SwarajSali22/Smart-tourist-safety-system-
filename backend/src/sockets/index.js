@@ -25,8 +25,12 @@ function initSocket(httpServer) {
   });
 
   io.on('connection', (socket) => {
-    if (socket.data.user.role === 'admin') socket.join('admin');
-    socket.join(`tourist:${socket.data.user.id}`);
+    // Rooms are chosen here, server-side, from the verified token — clients can't join others.
+    const { id, role } = socket.data.user;
+    if (role === 'admin') socket.join('admin');
+    if (role === 'responder') socket.join('responder');
+    socket.join(`tourist:${id}`); // legacy per-tourist room (location/SOS/check-in events)
+    socket.join(`user:${id}`);    // personal room: persistent notifications
   });
 
   return io;

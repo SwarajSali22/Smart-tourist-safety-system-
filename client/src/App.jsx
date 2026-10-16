@@ -19,6 +19,8 @@ import Incidents         from './features/admin/Incidents.jsx';
 import AdminMap          from './features/admin/AdminMap.jsx';
 import Analytics         from './features/admin/Analytics.jsx';
 import Blockchain        from './features/admin/Blockchain.jsx';
+import IncidentDetail    from './features/admin/IncidentDetail.jsx';
+import NotificationsPage from './features/shared/NotificationsPage.jsx';
 
 import TouristHome       from './features/tourist/TouristHome.jsx';
 import TouristProfile    from './features/tourist/TouristProfile.jsx';
@@ -53,6 +55,8 @@ function App() {
           <Route path="devices"   element={<Devices />} />
           <Route path="zones"     element={<Zones />} />
           <Route path="incidents" element={<Incidents />} />
+          <Route path="incidents/:id" element={<IncidentDetail />} />
+          <Route path="notifications" element={<NotificationsPage />} />
           <Route path="map"       element={<AdminMap />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="blockchain" element={<Blockchain />} />
@@ -72,6 +76,7 @@ function App() {
           <Route path="map"      element={<TouristMap />} />
           <Route path="sos"      element={<TouristSOS />} />
           <Route path="checks"   element={<TouristChecks />} />
+          <Route path="notifications" element={<NotificationsPage />} />
         </Route>
 
         {/* Fallback */}

@@ -5,7 +5,7 @@ import { useAuth } from '../auth/AuthContext.jsx';
 import { useToast } from '../components/ui/Toast.jsx';
 import { useOnReconnect } from '../socket/useSocketStatus.js';
 import { useI18n } from '../i18n/I18nContext.jsx';
-import { RISK_RANK } from '../utils/format.js';
+import { localizeNotification } from './localize.js';
 
 const AlertsContext = createContext(null);
 
@@ -35,20 +35,27 @@ function beep() {
 }
 
 const isOpen = (e) => e && (e.status === 'active' || e.status === 'acknowledged');
+const TOAST_VARIANT = { critical: 'danger', warning: 'warning', info: 'info' };
 
 /**
  * Live alert layer shared by both roles (mounted once by AppShell).
- *  - admin:   SOS, zone violations, missed / "unsafe" check-ins, risk escalations
- *             on every page, plus the set of active SOS for the red banner.
- *  - tourist: own zone alerts, check-in prompts, SOS progress, rising risk, plus
- *             their own open SOS (banner) and the "you entered a zone" notice.
- * Each event raises a toast and a bell entry; urgent ones may beep / notify.
+ *
+ *  - Notifications are PERSISTENT: they are stored server-side (GET /api/notifications),
+ *    pushed live as `notification:new`, and keep their read state. The bell, the unread
+ *    count and the notifications page all read from here.
+ *  - The red SOS banner tracks open SOS (admin: all, tourist: their own).
+ *  - Tourists also get an immediate "you entered a zone" banner from `geofence:violation`.
  */
 export function AlertsProvider({ children }) {
   const { user } = useAuth();
   const role = user?.role;
   const toast = useToast();
-  const [alerts, setAlerts] = useState([]);
+  const i18n = useI18n();
+  const i18nRef = useRef(i18n);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [activeSos, setActiveSos] = useState([]);
   const [zoneNotice, setZoneNotice] = useState(null);
   const [muted, setMuted] = useState(readMuted);
@@ -56,30 +63,26 @@ export function AlertsProvider({ children }) {
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission
   );
   const mutedRef = useRef(muted);
-  const i18n = useI18n();
-  const i18nRef = useRef(i18n); // tourist toasts use the language chosen right now
-  useEffect(() => { i18nRef.current = i18n; });
-  const riskSeen = useRef(new Map());
 
   useEffect(() => { mutedRef.current = muted; }, [muted]);
+  useEffect(() => { i18nRef.current = i18n; });
 
-  // Re-sync the open-SOS set (banner) after a reconnect.
-  useOnReconnect(() => {
-    if (role === 'admin') api.get('/sos').then((d) => setActiveSos((d.events || []).filter(isOpen))).catch(() => {});
-    else if (role === 'tourist') api.get('/sos/mine').then((d) => setActiveSos(isOpen(d.sosEvent) ? [d.sosEvent] : [])).catch(() => {});
-  });
+  const loadNotifications = useCallback(() => {
+    if (!role) return Promise.resolve();
+    return api.get('/notifications?limit=40')
+      .then((d) => { setNotifications(d.notifications || []); setUnreadCount(d.unreadCount || 0); setLoadError(''); })
+      .catch((e) => setLoadError(e.message || 'Could not load notifications'))
+      .finally(() => setLoaded(true));
+  }, [role]);
 
-  const push = useCallback(
-    (kind, title, message, { link = '/admin/incidents', variant = 'warning', loud = false } = {}) => {
-      setAlerts((as) => [{ id: `${Date.now()}-${Math.random()}`, kind, title, message, at: Date.now(), read: false, link }, ...as].slice(0, 50));
-      toast[variant](message, { title });
-      if (loud && !mutedRef.current) beep();
-      if (loud && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        try { new Notification(title, { body: message }); } catch { /* ignore */ }
-      }
-    },
-    [toast]
-  );
+  const loadSos = useCallback(() => {
+    if (role === 'admin') return api.get('/sos').then((d) => setActiveSos((d.events || []).filter(isOpen))).catch(() => {});
+    if (role === 'tourist') return api.get('/sos/mine').then((d) => setActiveSos(isOpen(d.sosEvent) ? [d.sosEvent] : [])).catch(() => {});
+    return Promise.resolve();
+  }, [role]);
+
+  useEffect(() => { loadNotifications(); loadSos(); }, [loadNotifications, loadSos]);
+  useOnReconnect(() => { loadNotifications(); loadSos(); }); // catch up on anything missed while offline
 
   useEffect(() => {
     if (!role) return undefined;
@@ -89,112 +92,88 @@ export function AlertsProvider({ children }) {
       return isOpen(e) ? [e, ...rest] : rest;
     });
 
-    if (role === 'admin') {
-      api.get('/sos')
-        .then((d) => setActiveSos((d.events || []).filter(isOpen)))
-        .catch(() => {});
-
-      const onSos = ({ sosEvent }) => {
-        upsertSos(sosEvent);
-        push('sos', 'SOS triggered', `${sosEvent.tourist?.name || 'A tourist'} needs help.`, { variant: 'danger', loud: true });
-      };
-      const onSosUpdated = (sosEvent) => upsertSos(sosEvent);
-      const onViolation = (p) => push('geofence', 'Zone violation', `${p.tourist?.name || 'A tourist'} entered ${p.zone?.name || 'a restricted zone'}.`, { link: '/admin/zones', loud: p.zone?.type === 'danger' });
-      const onMissed = () => push('checkin', 'Missed check-in', 'A tourist did not answer a safety check in time.', { variant: 'warning', loud: true });
-      const onCheckResponse = ({ safetyCheck }) => {
-        if (safetyCheck?.response === 'unsafe') {
-          push('checkin', 'Tourist reported unsafe', 'A tourist answered “I need help” on a safety check.', { variant: 'danger', loud: true });
-        }
-      };
-      const onRisk = (r) => {
-        const id = r.tourist?._id || r.tourist;
-        const prev = riskSeen.current.get(id) ?? 0;
-        const rank = RISK_RANK[r.level];
-        riskSeen.current.set(id, rank);
-        if (rank >= RISK_RANK.high && rank > prev) {
-          push('risk', `Risk ${r.level}`, `${r.tourist?.name || 'A tourist'} reached ${r.level} risk (score ${r.score}).`, {
-            link: '/admin', variant: r.level === 'critical' ? 'danger' : 'warning', loud: r.level === 'critical',
-          });
-        }
-      };
-
-      socket.on('sos:triggered', onSos);
-      socket.on('sos:updated', onSosUpdated);
-      socket.on('geofence:violation', onViolation);
-      socket.on('safetycheck:missed', onMissed);
-      socket.on('safetycheck:response', onCheckResponse);
-      socket.on('risk:updated', onRisk);
-      return () => {
-        socket.off('sos:triggered', onSos);
-        socket.off('sos:updated', onSosUpdated);
-        socket.off('geofence:violation', onViolation);
-        socket.off('safetycheck:missed', onMissed);
-        socket.off('safetycheck:response', onCheckResponse);
-        socket.off('risk:updated', onRisk);
-      };
-    }
-
-    // ── tourist ──
-    api.get('/sos/mine')
-      .then((d) => setActiveSos(isOpen(d.sosEvent) ? [d.sosEvent] : []))
-      .catch(() => {});
-
-    const onSos = (p) => { const e = p.sosEvent || p; upsertSos(e); };
-    const onSosUpdated = (e) => {
-      upsertSos(e);
-      const { t } = i18nRef.current;
-      if (e?.status === 'acknowledged') push('sos', t('alert.help.title'), t('alert.help.body'), { link: '/tourist/sos', variant: 'success' });
-      if (e?.status === 'resolved') push('sos', t('alert.resolved.title'), t('alert.resolved.body'), { link: '/tourist/sos', variant: 'success' });
-    };
-    const onViolation = (p) => {
-      const { t } = i18nRef.current;
-      const name = p.zone?.name || '—';
-      const danger = p.zone?.type === 'danger';
-      setZoneNotice({ name, danger });
-      push('geofence', t('alert.zone.title'), t(danger ? 'alert.zone.bodyDanger' : 'alert.zone.body', { zone: name }), {
-        link: '/tourist/map', variant: danger ? 'danger' : 'warning', loud: danger,
+    function onNotification(n) {
+      let isNew = false;
+      setNotifications((list) => {
+        if (list.some((x) => x._id === n._id)) return list;
+        isNew = true;
+        return [n, ...list].slice(0, 100);
       });
-    };
-    const onPrompt = () => {
-      const { t } = i18nRef.current;
-      push('checkin', t('alert.checkin.title'), t('alert.checkin.body'), { link: '/tourist/checks', variant: 'info', loud: true });
-    };
-    const onRisk = (r) => {
-      const rank = RISK_RANK[r.level];
-      const prev = riskSeen.current.get('me') ?? 0;
-      riskSeen.current.set('me', rank);
-      if (rank >= RISK_RANK.high && rank > prev) {
-        const { t, label } = i18nRef.current;
-        push('risk', t('alert.risk.title'), t('alert.risk.body', { level: label(r.level) }), { link: '/tourist', variant: 'warning' });
+      if (!isNew) return;
+      setUnreadCount((c) => c + 1);
+      const shown = localizeNotification(n, i18nRef.current, role);
+      toast[TOAST_VARIANT[n.severity] || 'info'](shown.message, { title: shown.title });
+      if (n.severity === 'critical') {
+        if (!mutedRef.current) beep();
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          try { new Notification(shown.title, { body: shown.message }); } catch { /* ignore */ }
+        }
       }
+    }
+    const onSos = (p) => upsertSos(p.sosEvent || p);
+    const onSosUpdated = (e) => upsertSos(e);
+    const onViolation = (p) => {
+      if (role !== 'tourist') return;
+      setZoneNotice({ name: p.zone?.name || '—', danger: p.zone?.type === 'danger' });
     };
 
+    socket.on('notification:new', onNotification);
     socket.on('sos:triggered', onSos);
     socket.on('sos:updated', onSosUpdated);
     socket.on('geofence:violation', onViolation);
-    socket.on('safetycheck:prompt', onPrompt);
-    socket.on('risk:updated', onRisk);
     return () => {
+      socket.off('notification:new', onNotification);
       socket.off('sos:triggered', onSos);
       socket.off('sos:updated', onSosUpdated);
       socket.off('geofence:violation', onViolation);
-      socket.off('safetycheck:prompt', onPrompt);
-      socket.off('risk:updated', onRisk);
     };
-  }, [role, push]);
+  }, [role, toast]);
+
+  // Mark one notification read (optimistic; restored with an error toast if the server refuses).
+  const markRead = useCallback(async (id) => {
+    const target = notifications.find((n) => n._id === id);
+    if (!target || target.read) return;
+    setNotifications((list) => list.map((n) => (n._id === id ? { ...n, read: true } : n)));
+    setUnreadCount((c) => Math.max(0, c - 1));
+    try {
+      await api.patch(`/notifications/${id}/read`, {});
+    } catch (err) {
+      setNotifications((list) => list.map((n) => (n._id === id ? { ...n, read: false } : n)));
+      setUnreadCount((c) => c + 1);
+      toast.error(`Couldn’t mark as read: ${err.message || 'request failed'}`);
+    }
+  }, [notifications, toast]);
+
+  const markAllRead = useCallback(async () => {
+    if (unreadCount === 0) return;
+    const prevList = notifications;
+    const prevCount = unreadCount;
+    setNotifications((list) => list.map((n) => ({ ...n, read: true })));
+    setUnreadCount(0);
+    try {
+      await api.post('/notifications/read-all', {});
+    } catch (err) {
+      setNotifications(prevList);
+      setUnreadCount(prevCount);
+      toast.error(`Couldn’t mark all as read: ${err.message || 'request failed'}`);
+    }
+  }, [notifications, unreadCount, toast]);
 
   const value = useMemo(
     () => ({
       role,
-      alerts,
+      notifications,
+      unreadCount,
+      loaded,
+      loadError,
+      reloadNotifications: loadNotifications,
+      markRead,
+      markAllRead,
       activeSos,
       zoneNotice,
       dismissZoneNotice: () => setZoneNotice(null),
-      unreadCount: alerts.filter((a) => !a.read).length,
       muted,
       desktopPermission,
-      markAllRead: () => setAlerts((as) => as.map((a) => ({ ...a, read: true }))),
-      clear: () => setAlerts([]),
       toggleMute: () => setMuted((m) => {
         try { localStorage.setItem('alertsMuted', m ? '0' : '1'); } catch { /* ignore */ }
         return !m;
@@ -204,7 +183,7 @@ export function AlertsProvider({ children }) {
         setDesktopPermission(await Notification.requestPermission());
       },
     }),
-    [role, alerts, activeSos, zoneNotice, muted, desktopPermission]
+    [role, notifications, unreadCount, loaded, loadError, loadNotifications, markRead, markAllRead, activeSos, zoneNotice, muted, desktopPermission]
   );
 
   return <AlertsContext.Provider value={value}>{children}</AlertsContext.Provider>;

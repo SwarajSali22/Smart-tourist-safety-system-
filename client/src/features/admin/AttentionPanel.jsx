@@ -6,7 +6,7 @@ import { label, timeAgo } from '../../shared/utils/format.js';
 const SOS_BADGE = { active: 'danger', acknowledged: 'warning' };
 
 const isOpenSos = (e) => e.status === 'active' || e.status === 'acknowledged';
-const isOpenIncident = (i) => i.status === 'open' || i.status === 'in_progress';
+const isOpenIncident = (i) => ['open', 'in_progress', 'assigned', 'en_route'].includes(i.status);
 
 /**
  * Top-of-dashboard "needs attention" list: active SOS events first, then any other
@@ -47,7 +47,7 @@ function AttentionPanel({ sosEvents, incidents, now }) {
               {e.tourist?._id && (
                 <Link className="btn btn--ghost btn--sm" to={`/admin/map?tourist=${e.tourist._id}`}><MapPin size={14} aria-hidden="true" /> Map</Link>
               )}
-              <Link className="btn btn--danger btn--sm" to="/admin/incidents">Respond</Link>
+              <Link className="btn btn--danger btn--sm" to={e.incident ? `/admin/incidents/${e.incident._id || e.incident}` : '/admin/incidents'}>Respond</Link>
             </span>
           </li>
         ))}
@@ -63,7 +63,7 @@ function AttentionPanel({ sosEvents, incidents, now }) {
               {i.tourist?._id && (
                 <Link className="btn btn--ghost btn--sm" to={`/admin/map?tourist=${i.tourist._id}`}><MapPin size={14} aria-hidden="true" /> Map</Link>
               )}
-              <Link className="btn btn--primary btn--sm" to="/admin/incidents">Open</Link>
+              <Link className="btn btn--primary btn--sm" to={`/admin/incidents/${i._id}`}>Open</Link>
             </span>
           </li>
         ))}

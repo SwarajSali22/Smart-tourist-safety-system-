@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BellRing } from 'lucide-react';
 import { useAuth } from '../../shared/auth/AuthContext.jsx';
@@ -11,6 +11,7 @@ import { useNow } from '../../shared/hooks/useNow.js';
 import Card from '../../shared/components/ui/Card.jsx';
 import Badge from '../../shared/components/ui/Badge.jsx';
 import EmptyState from '../../shared/components/ui/EmptyState.jsx';
+import ErrorState from '../../shared/components/ui/ErrorState.jsx';
 import GeoMap from '../../shared/components/GeoMap.jsx';
 import RiskBoard from '../../shared/components/RiskBoard.jsx';
 import AttentionPanel from './AttentionPanel.jsx';
@@ -34,16 +35,24 @@ function AdminHome() {
   const [devices, setDevices] = useState([]);
   const [zones, setZones] = useState([]);
   const [sosEvents, setSosEvents] = useState([]);
-  const [incidents, setIncidents] = useState([]);
+  const [incidents, setIncidents] = useState([]); // ACTIVE incidents only (server-filtered)
+  const [incidentTotal, setIncidentTotal] = useState(0);
+  const [loadError, setLoadError] = useState('');
   const [trend, setTrend] = useState(null);
+  const incTimer = useRef(null);
   const [lastUpdate, setLastUpdate] = useState(() => Date.now());
   const risk = useRiskBoard();
 
-  useEffect(() => {
-    api.get('/devices').then((data) => setDevices(data.devices || [])).catch(() => {});
-    api.get('/zones').then((data) => setZones(data.zones || [])).catch(() => {});
-    api.get('/sos').then((data) => setSosEvents(data.events || [])).catch(() => {});
-    api.get('/incidents').then((data) => setIncidents(data.incidents || [])).catch(() => {});
+  const loadIncidents = useCallback(() => api.get('/incidents?active=1&limit=50&sort=severity&order=desc')
+    .then((d) => { setIncidents(d.incidents || []); setIncidentTotal(d.total || 0); })
+    .catch((e) => setLoadError(e.message || 'Some data failed to load')), []);
+
+  const loadAll = useCallback(() => {
+    const fail = (e) => setLoadError(e.message || 'Some data failed to load');
+    api.get('/devices').then((data) => setDevices(data.devices || [])).catch(fail);
+    api.get('/zones').then((data) => setZones(data.zones || [])).catch(fail);
+    api.get('/sos').then((data) => setSosEvents(data.events || [])).catch(fail);
+    loadIncidents();
     api.get('/analytics/overview')
       .then((d) => setTrend(d.incidentsByDay.map((x) => ({
         label: new Date(`${x.date}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
@@ -51,7 +60,9 @@ function AdminHome() {
         value: x.count,
       }))))
       .catch(() => {});
-  }, []);
+  }, [loadIncidents]);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
 
   useZoneSync(setZones);
 
@@ -60,7 +71,7 @@ function AdminHome() {
   useOnReconnect(() => {
     api.get('/devices').then((d) => setDevices(d.devices || [])).catch(() => {});
     api.get('/sos').then((d) => setSosEvents(d.events || [])).catch(() => {});
-    api.get('/incidents').then((d) => setIncidents(d.incidents || [])).catch(() => {});
+    loadIncidents();
   });
 
   useEffect(() => {
@@ -68,13 +79,14 @@ function AdminHome() {
     const touch = () => setLastUpdate(Date.now());
 
     function onLocationUpdate(device) { setDevices((ds) => upsert(ds, device)); touch(); }
-    function onSosTriggered({ sosEvent, incident }) {
+    const refreshIncidents = () => { clearTimeout(incTimer.current); incTimer.current = setTimeout(loadIncidents, 400); };
+    function onSosTriggered({ sosEvent }) {
       setSosEvents((es) => upsert(es, sosEvent));
-      setIncidents((is) => upsert(is, incident));
+      refreshIncidents();
       touch();
     }
     function onSosUpdated(sosEvent) { setSosEvents((es) => upsert(es, sosEvent)); touch(); }
-    function onIncidentUpdated(incident) { setIncidents((is) => upsert(is, incident)); touch(); }
+    function onIncidentUpdated() { refreshIncidents(); touch(); }
 
     socket.on('location:update', onLocationUpdate);
     socket.on('sos:triggered', onSosTriggered);
@@ -85,18 +97,19 @@ function AdminHome() {
       socket.off('sos:triggered', onSosTriggered);
       socket.off('sos:updated', onSosUpdated);
       socket.off('incident:updated', onIncidentUpdated);
+      clearTimeout(incTimer.current);
     };
-  }, []);
+  }, [loadIncidents]);
 
   const openSosCount = sosEvents.filter((e) => e.status === 'active' || e.status === 'acknowledged').length;
-  const openIncidentCount = incidents.filter((i) => i.status === 'open' || i.status === 'in_progress').length;
+  const openIncidentCount = incidentTotal;
   const recentAlerts = sosEvents.slice(0, 5);
 
   const STATS = [
-    { label: 'Active tourists',    value: devices.filter((d) => d.status === 'active' || d.status === 'emergency').length, note: 'devices reporting' },
-    { label: 'Active SOS alerts',  value: openSosCount, note: openSosCount ? 'needs attention' : 'all clear' },
-    { label: 'Open incidents',     value: openIncidentCount, note: 'open or in progress' },
-    { label: 'Registered devices', value: devices.length, note: `${devices.filter((d) => d.isSimulated).length} simulated` },
+    { label: 'Active tourists',    to: '/admin/tourists?status=active', value: devices.filter((d) => d.status === 'active' || d.status === 'emergency').length, note: 'devices reporting' },
+    { label: 'Active SOS alerts',  to: '/admin/incidents?type=sos&active=1', value: openSosCount, note: openSosCount ? 'needs attention' : 'all clear' },
+    { label: 'Open incidents',     to: '/admin/incidents?active=1', value: openIncidentCount, note: 'not yet resolved' },
+    { label: 'Registered devices', to: '/admin/devices', value: devices.length, note: `${devices.filter((d) => d.isSimulated || d.tourist?.isDemo).length} simulated` },
   ];
 
   return (
@@ -106,15 +119,19 @@ function AdminHome() {
         Live overview · updated {timeAgo(lastUpdate, now)}
       </p>
 
+      {loadError && <ErrorState compact message={loadError} onRetry={() => { setLoadError(''); loadAll(); }} />}
+
       <AttentionPanel sosEvents={sosEvents} incidents={incidents} now={now} />
 
       <div className="stats-grid">
         {STATS.map((s) => (
-          <Card key={s.label} className="stat-card">
-            <p className="stat-card__value">{s.value}</p>
-            <p className="stat-card__label">{s.label}</p>
-            <p className="stat-card__note">{s.note}</p>
-          </Card>
+          <Link key={s.label} to={s.to} className="stat-link" aria-label={`${s.label}: ${s.value}. ${s.note}. Open the list.`}>
+            <Card className="stat-card">
+              <p className="stat-card__value">{s.value}</p>
+              <p className="stat-card__label">{s.label}</p>
+              <p className="stat-card__note">{s.note}</p>
+            </Card>
+          </Link>
         ))}
       </div>
 
@@ -140,7 +157,7 @@ function AdminHome() {
               {recentAlerts.map((e) => (
                 <li key={e._id} className="status-row">
                   <span>
-                    <Link to="/admin/incidents">{e.tourist?.name || 'Unknown tourist'}</Link>
+                    <Link to={e.incident ? `/admin/incidents/${e.incident._id || e.incident}` : '/admin/incidents'}>{e.tourist?.name || 'Unknown tourist'}</Link>
                     <small className="form-hint block">{label(e.source)} · {timeAgo(e.createdAt, now)}</small>
                   </span>
                   <Badge variant={SOS_BADGE[e.status]}>{label(e.status)}</Badge>

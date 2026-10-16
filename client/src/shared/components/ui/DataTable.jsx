@@ -9,6 +9,11 @@ import EmptyState from './EmptyState.jsx';
  * columns: [{ key, header, render?(row), sortValue?(row), className? }]
  * Pass `searchText(row)` to enable the search box, `toolbar` for extra filters,
  * `renderExpanded(row)` + `expandedId` + `onRowClick` for expandable rows.
+ *
+ * SERVER MODE (`manual`): the server already searched / sorted / paginated, so the
+ * table shows `rows` exactly as given. Provide `sort={{ key, dir }}` + `onSort(key)`
+ * for header clicks and `pagination={{ page, pages, total, pageSize, onPage }}`.
+ * The search box is the caller's job (put it in `toolbar`).
  */
 function DataTable({
   columns,
@@ -26,18 +31,25 @@ function DataTable({
   expandedId,
   renderExpanded,
   caption,
+  manual = false,
+  sort: serverSort,
+  onSort,
+  pagination,
+  rowClassName,
 }) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState({ key: null, dir: 'asc' });
   const [page, setPage] = useState(0);
 
   const filtered = useMemo(() => {
+    if (manual) return rows;
     const q = query.trim().toLowerCase();
     if (!q || !searchText) return rows;
     return rows.filter((r) => searchText(r).toLowerCase().includes(q));
-  }, [rows, query, searchText]);
+  }, [rows, query, searchText, manual]);
 
   const sorted = useMemo(() => {
+    if (manual) return filtered;
     const col = columns.find((c) => c.key === sort.key);
     if (!col?.sortValue) return filtered;
     const dir = sort.dir === 'asc' ? 1 : -1;
@@ -49,13 +61,16 @@ function DataTable({
       if (bv == null) return -1;
       return av < bv ? -dir : av > bv ? dir : 0;
     });
-  }, [filtered, sort, columns]);
+  }, [filtered, sort, columns, manual]);
 
-  const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const safePage = Math.min(page, pageCount - 1);
-  const visible = sorted.slice(safePage * pageSize, safePage * pageSize + pageSize);
+  const pageCount = manual ? pagination?.pages || 1 : Math.max(1, Math.ceil(sorted.length / pageSize));
+  const safePage = manual ? (pagination?.page || 1) - 1 : Math.min(page, pageCount - 1);
+  const visible = manual ? sorted : sorted.slice(safePage * pageSize, safePage * pageSize + pageSize);
+  const totalCount = manual ? pagination?.total ?? sorted.length : sorted.length;
+  const goToPage = (p) => (manual ? pagination?.onPage?.(p + 1) : setPage(p));
 
   function toggleSort(col) {
+    if (manual) { if (col.sortKey) onSort?.(col.sortKey); return; }
     if (!col.sortValue) return;
     setPage(0);
     setSort((s) => (s.key === col.key ? { key: col.key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key: col.key, dir: 'asc' }));
@@ -83,9 +98,9 @@ function DataTable({
         </div>
       )}
 
-      {rows.length === 0 ? (
+      {rows.length === 0 && (!manual || !pagination || pagination.total === 0) ? (
         <EmptyState icon={emptyIcon} title={emptyTitle} action={emptyAction}>{emptyText}</EmptyState>
-      ) : sorted.length === 0 ? (
+      ) : sorted.length === 0 && !manual ? (
         <EmptyState title="No matches">Try a different search or clear the filters.</EmptyState>
       ) : (
         <>
@@ -95,17 +110,19 @@ function DataTable({
               <thead>
                 <tr>
                   {columns.map((c) => {
-                    const active = sort.key === c.key;
+                    const cur = manual ? serverSort : sort;
+                    const sortable = manual ? Boolean(c.sortKey) : Boolean(c.sortValue);
+                    const active = manual ? cur?.key === c.sortKey : sort.key === c.key;
                     return (
                       <th
                         key={c.key}
                         scope="col"
-                        aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
+                        aria-sort={active ? (cur?.dir === 'asc' ? 'ascending' : 'descending') : undefined}
                       >
-                        {c.sortValue ? (
+                        {sortable ? (
                           <button type="button" className="th-sort" onClick={() => toggleSort(c)}>
                             {c.header}
-                            {active && (sort.dir === 'asc' ? <ArrowUp size={12} aria-hidden="true" /> : <ArrowDown size={12} aria-hidden="true" />)}
+                            {active && (cur?.dir === 'asc' ? <ArrowUp size={12} aria-hidden="true" /> : <ArrowDown size={12} aria-hidden="true" />)}
                           </button>
                         ) : (
                           c.header
@@ -123,7 +140,7 @@ function DataTable({
                   return (
                     <Fragment key={key}>
                       <tr
-                        className={expandable ? 'row-clickable' : undefined}
+                        className={[expandable ? 'row-clickable' : '', rowClassName?.(row) || ''].join(' ').trim() || undefined}
                         onClick={expandable ? () => onRowClick(row) : undefined}
                         onKeyDown={
                           expandable
@@ -159,13 +176,13 @@ function DataTable({
           {pageCount > 1 && (
             <div className="pagination">
               <span className="form-hint" aria-live="polite">
-                {safePage * pageSize + 1}–{Math.min(sorted.length, (safePage + 1) * pageSize)} of {sorted.length}
+                {safePage * pageSize + 1}–{Math.min(totalCount, (safePage + 1) * pageSize)} of {totalCount}
               </span>
               <div className="pagination__buttons">
-                <button type="button" className="icon-btn" onClick={() => setPage(safePage - 1)} disabled={safePage === 0} aria-label="Previous page">
+                <button type="button" className="icon-btn" onClick={() => goToPage(safePage - 1)} disabled={safePage === 0} aria-label="Previous page">
                   <ChevronLeft size={18} aria-hidden="true" />
                 </button>
-                <button type="button" className="icon-btn" onClick={() => setPage(safePage + 1)} disabled={safePage >= pageCount - 1} aria-label="Next page">
+                <button type="button" className="icon-btn" onClick={() => goToPage(safePage + 1)} disabled={safePage >= pageCount - 1} aria-label="Next page">
                   <ChevronRight size={18} aria-hidden="true" />
                 </button>
               </div>

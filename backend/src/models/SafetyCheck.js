@@ -47,6 +47,15 @@ const safetyCheckSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+safetyCheckSchema.pre('save', function remember(next) {
+  this.$locals.wasNew = this.isNew;
+  next();
+});
+safetyCheckSchema.post('save', function notifyTourist(doc) {
+  if (!doc.$locals.wasNew) return;
+  require('../services/notifications/events').onSafetyCheckCreated(doc).catch((err) => console.error('[notify] check-in:', err.message));
+});
+
 safetyCheckSchema.index({ tourist: 1, scheduledAt: -1 });
 safetyCheckSchema.index({ response: 1, escalated: 1 });
 

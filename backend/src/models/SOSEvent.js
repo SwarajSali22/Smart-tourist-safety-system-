@@ -45,6 +45,9 @@ const sosEventSchema = new mongoose.Schema(
       ref: 'Incident',
       default: null,
     },
+    // Set to the tourist id while the SOS is active/acknowledged and removed when it ends.
+    // The unique sparse index below makes a second concurrent SOS impossible.
+    activeKey: { type: String, default: undefined },
     auditProof: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'AuditProof',
@@ -56,5 +59,6 @@ const sosEventSchema = new mongoose.Schema(
 
 sosEventSchema.index({ tourist: 1, createdAt: -1 });
 sosEventSchema.index({ status: 1 });
+sosEventSchema.index({ activeKey: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('SOSEvent', sosEventSchema);

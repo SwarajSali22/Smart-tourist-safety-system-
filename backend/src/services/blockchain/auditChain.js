@@ -72,6 +72,11 @@ const PAYLOAD = {
     sourceRef: { refModel: d.sourceRef?.refModel || null, refId: idOf(d.sourceRef?.refId) },
     createdAt: iso(d.createdAt),
   }),
+  incident_assigned: (d) => ({
+    id: idOf(d),
+    assignedAdmin: idOf(d.assignedAdmin),
+    assignedAt: iso(d.assignedAt),
+  }),
   incident_resolved: (d) => ({
     id: idOf(d),
     status: d.status,
@@ -133,13 +138,17 @@ async function verifyProof(proofId) {
     sourceFound && sha256(canonicalize(PAYLOAD[proof.eventType](source))) === proof.dataHash;
 
   const verified = payloadIntact && chainIntact && sourceMatches;
+  // verified — everything matches
+  // missing  — the source record no longer exists in the database
+  // modified — the source record, the stored payload or the chain link was changed after it was hashed
+  const status = verified ? 'verified' : !sourceFound ? 'missing' : 'modified';
   await AuditProof.updateOne({ _id: proof._id }, { verified, verifiedAt: new Date() });
 
   return {
     proofId: proof._id,
     eventType: proof.eventType,
     sequenceNo: proof.chainRef.sequenceNo,
-    status: verified ? 'verified' : 'tampered',
+    status,
     checks: { payloadIntact, chainIntact, sourceFound, sourceMatches },
     dataHash: proof.dataHash,
     checkedAt: new Date(),

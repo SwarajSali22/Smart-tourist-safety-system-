@@ -95,7 +95,7 @@ export default {
   'home.map.open': 'नकाशा उघडा',
   'home.sos.title': 'SOS',
   'home.sos.yours': 'तुमचा SOS',
-  'home.sos.hint': 'आणीबाणीत दाबा — अ‍ॅडमिन आणि तुमच्या आपत्कालीन संपर्कांना लगेच सूचना जाईल.',
+  'home.sos.hint': 'आणीबाणीत दाबा — अ‍ॅडमिनला लगेच सूचना जाईल. SMS अलर्ट सेट असल्यास तुमच्या आपत्कालीन संपर्कांनाही SMS पाठवला जातो.',
   'home.sos.open': 'SOS उघडा',
   'home.sos.viewStatus': 'SOS ची स्थिती पहा',
 
@@ -197,4 +197,19 @@ export default {
   'profile.trip.saved': 'प्रवासाचा कार्यक्रम जतन केला.',
   'profile.trip.badDates': 'थांबा {n}: प्रस्थानाची तारीख आगमनापूर्वीची आहे.',
   'profile.trip.error': 'प्रवासाचा कार्यक्रम जतन करता आला नाही',
+
+  // ── notifications (persistent) ──
+  'alert.assigned.title': 'एक रिस्पॉन्डर नेमला गेला',
+  'alert.assigned.body': 'तुमच्या मदतीसाठी कोणाला तरी नेमले आहे.',
+  'alert.enroute.title': 'मदत येत आहे',
+  'alert.enroute.body': 'एक रिस्पॉन्डर तुमच्या लोकेशनकडे येत आहे.',
+  'alert.safety.title': 'तुमची सुरक्षा पातळी बदलली आहे',
+  'alert.safety.risk': 'तुमची धोका पातळी वाढलेली आहे. सतर्क रहा आणि अधिक सुरक्षित ठिकाणी जाण्याचा विचार करा.',
+  'alert.safety.noresponse': 'एका सुरक्षा चेक-इनला उत्तर मिळाले नाही. तुम्ही सुरक्षित असल्यास अ‍ॅप उघडून उत्तर द्या.',
+  'notif.title': 'सूचना',
+  'notif.empty': 'अजून कोणतीही सूचना नाही.',
+  'notif.unread': 'न वाचलेल्या',
+  'notif.all': 'सर्व',
+  'notif.markAll': 'सर्व वाचले म्हणून नोंदवा',
+  'notif.open': 'उघडा',
 };

@@ -95,7 +95,7 @@ export default {
   'home.map.open': 'नक्शा खोलें',
   'home.sos.title': 'SOS',
   'home.sos.yours': 'आपका SOS',
-  'home.sos.hint': 'आपातकाल में दबाएं — एडमिन और आपके आपातकालीन संपर्कों को तुरंत सूचना जाएगी।',
+  'home.sos.hint': 'आपातकाल में दबाएं — एडमिन को तुरंत सूचना जाएगी। SMS अलर्ट सेट होने पर आपके आपातकालीन संपर्कों को भी SMS भेजा जाता है।',
   'home.sos.open': 'SOS खोलें',
   'home.sos.viewStatus': 'SOS की स्थिति देखें',
 
@@ -197,4 +197,19 @@ export default {
   'profile.trip.saved': 'यात्रा कार्यक्रम सहेज लिया गया।',
   'profile.trip.badDates': 'पड़ाव {n}: प्रस्थान की तारीख आगमन से पहले है।',
   'profile.trip.error': 'यात्रा कार्यक्रम सहेजा नहीं जा सका',
+
+  // ── notifications (persistent) ──
+  'alert.assigned.title': 'एक रिस्पॉन्डर नियुक्त किया गया',
+  'alert.assigned.body': 'आपकी मदद के लिए किसी को नियुक्त किया गया है।',
+  'alert.enroute.title': 'मदद आ रही है',
+  'alert.enroute.body': 'एक रिस्पॉन्डर आपकी लोकेशन की ओर आ रहा है।',
+  'alert.safety.title': 'आपका सुरक्षा स्तर बदला है',
+  'alert.safety.risk': 'आपका जोखिम स्तर बढ़ा हुआ है। सतर्क रहें और किसी सुरक्षित जगह जाने पर विचार करें।',
+  'alert.safety.noresponse': 'एक सुरक्षा चेक-इन का जवाब नहीं मिला। अगर आप सुरक्षित हैं तो ऐप खोलकर जवाब दें।',
+  'notif.title': 'सूचनाएं',
+  'notif.empty': 'अभी कोई सूचना नहीं।',
+  'notif.unread': 'अपठित',
+  'notif.all': 'सभी',
+  'notif.markAll': 'सभी को पढ़ा हुआ मार्क करें',
+  'notif.open': 'खोलें',
 };

@@ -70,7 +70,7 @@ function Blockchain() {
     let tampered = 0;
     for (const p of proofs.slice(0, 25)) {
       const r = await verifyOne(p._id);
-      if (r?.status === 'tampered') tampered += 1;
+      if (r && r.status !== 'verified') tampered += 1;
     }
     if (tampered) toast.danger(`${tampered} record${tampered === 1 ? '' : 's'} failed verification.`);
     else toast.success('The 25 newest proofs all verified.');

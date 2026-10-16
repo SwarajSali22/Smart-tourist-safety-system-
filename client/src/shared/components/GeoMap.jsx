@@ -4,6 +4,7 @@ import { divIcon } from 'leaflet';
 import { Maximize2, Minimize2 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { label, sourceLabel, timeAgo } from '../utils/format.js';
+import { FRESH_LABEL, freshnessOf } from '../utils/freshness.js';
 
 const ZONE_COLOR = {
   safe: '#2e7d5b',
@@ -17,7 +18,8 @@ const LEGEND = [
   ['high', 'High'],
   ['critical', 'Critical'],
   ['sos', 'SOS / emergency'],
-  ['idle', 'Offline / no risk data'],
+  ['stale', 'Stale or offline data'],
+  ['idle', 'No risk data yet'],
 ];
 
 // Leaflet's default marker PNGs don't resolve correctly through Vite's
@@ -38,8 +40,11 @@ const vertexIcon = divIcon({ className: 'draft-vertex', html: '<span></span>', i
 // looks like just another tracked wristband on the same map.
 const userIcon = divIcon({ className: 'user-marker', html: '<span></span>', iconSize: [16, 16] });
 
+// Emergencies always show as SOS. Otherwise data that isn't fresh is drawn grey ("stale"),
+// so an old position is never mistaken for a live one.
 function markerKind(device, risk) {
   if (device.emergencyMode || device.status === 'emergency') return 'sos';
+  if (freshnessOf(device.lastSeen) !== 'live') return 'stale';
   if (device.status === 'inactive' || device.status === 'lost') return 'idle';
   return risk?.level || 'idle';
 }
@@ -123,6 +128,18 @@ function FlyTo({ target }) {
   return null;
 }
 
+// Fit the map to a set of points whenever `fit.key` changes ("Fit all" button).
+function FitBounds({ fit }) {
+  const map = useMap();
+  useEffect(() => {
+    const pts = fit?.points;
+    if (!pts || pts.length === 0) return;
+    if (pts.length === 1) map.flyTo(pts[0], Math.max(map.getZoom(), 15), { duration: 0.8 });
+    else map.fitBounds(pts, { padding: [48, 48], maxZoom: 16, animate: true });
+  }, [fit?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
 // Leaflet caches its size; tell it when the container changes (fullscreen toggle).
 function InvalidateOn({ dep }) {
   const map = useMap();
@@ -141,7 +158,8 @@ function InvalidateOn({ dep }) {
  *    to make every placed vertex draggable so the shape can be adjusted afterwards.
  *  - `trails` → [{ id, points: [[lat,lng]…] }] polylines; `replayPoint` → moving dot.
  *  - `heatPoints` → [{ lat, lng, weight }] incident density overlay.
- *  - `flyTo` → { lat, lng, key } smooth recenter; `selectedDeviceId` highlights one device.
+ *  - `flyTo` → { lat, lng, key } smooth recenter; `fit` → { key, points } fit-all; `selectedDeviceId` highlights one device.
+ *  - `showZones` / `showDevices` switch those layers off (the admin "Layers" menu).
  *  - `userPosition` → the viewer's own live location (distinct green marker).
  *  - `allowFullscreen` adds an expand button (Esc to exit); `showLegend` adds a text legend.
  */
@@ -158,6 +176,9 @@ function GeoMap({
   selectedDeviceId,
   onSelectDevice,
   flyTo,
+  fit,
+  showZones = true,
+  showDevices = true,
   onMapClick,
   draftPoints,
   onDraftChange,
@@ -198,9 +219,10 @@ function GeoMap({
         <InvalidateOn dep={full} />
         {focusPosition && <RecenterOnce position={focusPosition} zoom={zoom} />}
         {flyTo && <FlyTo target={flyTo} />}
+        {fit && <FitBounds fit={fit} />}
         {onMapClick && <ClickCapture onMapClick={onMapClick} />}
 
-        {zones.map((zone) => (
+        {showZones && zones.map((zone) => (
           <Polygon
             key={zone._id}
             positions={zone.geometry.coordinates[0].map(([lng, lat]) => [lat, lng])}
@@ -266,7 +288,7 @@ function GeoMap({
           </SmoothMarker>
         )}
 
-        {devices
+        {showDevices && devices
           .filter((d) => d.lastLocation?.lat != null)
           .map((d) => {
             const risk = riskByTourist[d.tourist?._id || d.tourist];
@@ -282,7 +304,9 @@ function GeoMap({
                 <Popup>
                   <strong>{d.tourist?.name || d.deviceId}</strong>
                   <br />
-                  Status: {label(d.status)} · {sourceLabel(d)}
+                  {sourceLabel(d)} · {FRESH_LABEL[freshnessOf(d.lastSeen)]}
+                  <br />
+                  Status: {label(d.status)}
                   {risk && (
                     <>
                       <br />
