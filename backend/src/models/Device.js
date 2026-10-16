@@ -13,6 +13,13 @@ const deviceSchema = new mongoose.Schema(
       ref: 'User',
       default: null,
     },
+    // 'wristband' = ESP32 / simulator (device-key auth); 'phone' = the tourist's own
+    // phone, auto-created from POST /tourists/me/location (JWT auth, no API key).
+    type: {
+      type: String,
+      enum: ['wristband', 'phone'],
+      default: 'wristband',
+    },
     // Lightweight per-device secret issued at registration (Phase 3 stores the hash)
     apiKeyHash: {
       type: String,

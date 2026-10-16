@@ -10,7 +10,7 @@ import { useToast } from '../../shared/components/ui/Toast.jsx';
 import Badge from '../../shared/components/ui/Badge.jsx';
 import EmptyState from '../../shared/components/ui/EmptyState.jsx';
 import GeoMap from '../../shared/components/GeoMap.jsx';
-import { label, RISK_RANK, RISK_VARIANT, STALE_MS, timeAgo } from '../../shared/utils/format.js';
+import { label, RISK_RANK, RISK_VARIANT, sourceLabel, STALE_MS, timeAgo } from '../../shared/utils/format.js';
 
 const REPLAY_STEP_MS = 350;
 
@@ -187,6 +187,7 @@ function AdminMap() {
                     >
                       <span className="tourist-item__name">{d.tourist?.name || d.deviceId}</span>
                       <span className="tourist-item__badges">
+                        <Badge variant="neutral">{sourceLabel(d)}</Badge>
                         {d.emergencyMode && <Badge variant="danger">SOS</Badge>}
                         {r && <Badge variant={RISK_VARIANT[r.level]}>{label(r.level)} {r.score}</Badge>}
                         {stale && <Badge variant="warning">Silent</Badge>}

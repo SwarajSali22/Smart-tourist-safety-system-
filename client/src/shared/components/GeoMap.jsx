@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Polygon, Polyline, Marker, CircleMarker, Popup
 import { divIcon } from 'leaflet';
 import { Maximize2, Minimize2 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
-import { label, timeAgo } from '../utils/format.js';
+import { label, sourceLabel, timeAgo } from '../utils/format.js';
 
 const ZONE_COLOR = {
   safe: '#2e7d5b',
@@ -222,7 +222,7 @@ function GeoMap({
                 <Popup>
                   <strong>{d.tourist?.name || d.deviceId}</strong>
                   <br />
-                  Status: {label(d.status)}
+                  Status: {label(d.status)} · {sourceLabel(d)}
                   {risk && (
                     <>
                       <br />

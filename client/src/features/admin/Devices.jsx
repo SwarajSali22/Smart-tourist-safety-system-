@@ -8,7 +8,7 @@ import Card from '../../shared/components/ui/Card.jsx';
 import Badge from '../../shared/components/ui/Badge.jsx';
 import DataTable from '../../shared/components/ui/DataTable.jsx';
 import { SkeletonRows } from '../../shared/components/ui/Skeleton.jsx';
-import { label, STALE_MS, timeAgo } from '../../shared/utils/format.js';
+import { label, sourceLabel, STALE_MS, timeAgo } from '../../shared/utils/format.js';
 
 const STATUS_VARIANT = {
   active: 'success',
@@ -56,7 +56,8 @@ function Devices() {
     return () => socket.off('location:update', onLocationUpdate);
   }, []);
 
-  const unassignedTourists = tourists.filter((t) => !t.device);
+  // A tourist tracked only by their phone can still be given a wristband (it replaces the phone device).
+  const unassignedTourists = tourists.filter((t) => !t.device || t.deviceType === 'phone');
 
   async function handleRegister(e) {
     e.preventDefault();
@@ -90,6 +91,7 @@ function Devices() {
 
   const columns = [
     { key: 'deviceId', header: 'Device ID', sortValue: (d) => d.deviceId },
+    { key: 'type', header: 'Source', sortValue: (d) => sourceLabel(d), render: (d) => <Badge variant="neutral">{sourceLabel(d)}</Badge> },
     { key: 'tourist', header: 'Tourist', sortValue: (d) => d.tourist?.name?.toLowerCase() ?? '', render: (d) => (d.tourist ? `${d.tourist.name} (${d.tourist.email})` : '—') },
     {
       key: 'status', header: 'Status', sortValue: (d) => d.status,
@@ -133,9 +135,9 @@ function Devices() {
           <label className="form-label">
             Tourist
             <select className="form-input" value={selectedTourist} onChange={(e) => setSelectedTourist(e.target.value)}>
-              <option value="">Select a tourist without a device…</option>
+              <option value="">Select a tourist without a wristband…</option>
               {unassignedTourists.map((t) => (
-                <option key={t._id} value={t._id}>{t.name} ({t.email})</option>
+                <option key={t._id} value={t._id}>{t.name} ({t.email}){t.deviceType === 'phone' ? ' — phone GPS only' : ''}</option>
               ))}
             </select>
             {!loading && unassignedTourists.length === 0 && (
@@ -159,7 +161,7 @@ function Devices() {
             searchLabel="Search devices"
             emptyIcon={Watch}
             emptyTitle="No devices registered yet"
-            emptyText="Register one above, then run scripts/simulateGps.js with the issued key."
+            emptyText="Phones appear automatically when a tourist shares their location. For a wristband, register one above and run scripts/simulateGps.js with the issued key."
             caption="Registered devices"
           />
         )}

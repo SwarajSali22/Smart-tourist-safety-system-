@@ -7,6 +7,7 @@ import AlertBell from '../alerts/AlertBell.jsx';
 import { ThemeToggle } from '../theme/ThemeContext.jsx';
 import { NAV, ROLE_HOME, ROLE_TITLE } from '../navConfig.js';
 import UserMenu from './UserMenu.jsx';
+import { LocationSharingProvider } from '../location/LocationSharingContext.jsx';
 
 /** Red banner while an SOS is open: admins see all active SOS, a tourist sees their own. */
 function SosBanner({ role }) {
@@ -166,11 +167,14 @@ function ShellInner() {
 
 /** The one layout for both roles. Route guards (ProtectedRoute) stay in App.jsx. */
 function AppShell() {
-  return (
+  const { user } = useAuth();
+  const shell = (
     <AlertsProvider>
       <ShellInner />
     </AlertsProvider>
   );
+  // Tourists' phones report their GPS app-wide while signed in (unmounts on logout).
+  return user?.role === 'tourist' ? <LocationSharingProvider>{shell}</LocationSharingProvider> : shell;
 }
 
 export default AppShell;

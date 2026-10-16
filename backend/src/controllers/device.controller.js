@@ -1,9 +1,6 @@
-const { Device, TouristProfile, User, LocationPing, GeofenceEvent } = require('../models');
-const { recordProof } = require('../services/blockchain/auditChain');
+const { Device, TouristProfile, User, LocationPing } = require('../models');
 const { generateDeviceApiKey, hashDeviceApiKey } = require('../services/auth.service');
-const { evaluateGeofence } = require('../services/geofencing/checkGeofence');
-const { triggerSos, SosAlreadyActiveError } = require('../services/sos/triggerSos');
-const { evaluateRisk } = require('../services/riskAssessment/evaluateRisk');
+const { processTelemetry, toSafeDevice } = require('../services/telemetry/processTelemetry');
 const crypto = require('crypto');
 
 // ── POST /api/devices  (admin only) ───────────────────────────────────────────
@@ -20,9 +17,16 @@ async function registerDevice(req, res, next) {
       return res.status(404).json({ success: false, message: 'Tourist not found' });
     }
 
-    const profile = await TouristProfile.findOne({ user: tourist });
+    const profile = await TouristProfile.findOne({ user: tourist }).populate('device', 'type');
     if (profile?.device) {
-      return res.status(409).json({ success: false, message: 'Tourist already has a device' });
+      // The system assumes one device per tourist. A phone device (auto-created
+      // from the tourist's own GPS) is replaced by a real wristband; any other
+      // existing device is a conflict.
+      if (profile.device.type !== 'phone') {
+        return res.status(409).json({ success: false, message: 'Tourist already has a device' });
+      }
+      await Device.deleteOne({ _id: profile.device._id });
+      await TouristProfile.updateOne({ user: tourist }, { device: null });
     }
 
     const resolvedDeviceId = deviceId || `SIM-${crypto.randomBytes(4).toString('hex')}`;
@@ -126,87 +130,9 @@ async function ingestTelemetry(req, res, next) {
       return res.status(400).json({ success: false, message: 'lat and lng are required numbers' });
     }
 
-    await LocationPing.create({
-      device: req.device._id,
-      tourist: req.device.tourist,
-      lat,
-      lng,
-      battery: typeof battery === 'number' ? battery : null,
-      timestamp: timestamp ? new Date(timestamp) : new Date(),
+    await processTelemetry({
+      device: req.device, lat, lng, battery, sosPressed, timestamp, io: req.app.get('io'),
     });
-
-    req.device.lastLocation = { lat, lng };
-    req.device.lastSeen = new Date();
-    if (typeof battery === 'number') req.device.battery = battery;
-    req.device.emergencyMode = Boolean(sosPressed);
-    req.device.status = sosPressed ? 'emergency' : 'active';
-    const { entered, exited } = await evaluateGeofence(req.device, lat, lng);
-    await req.device.save();
-
-    if (sosPressed) {
-      try {
-        await triggerSos({
-          tourist: req.device.tourist,
-          device: req.device._id,
-          location: { lat, lng },
-          source: 'button',
-          io: req.app.get('io'),
-        });
-      } catch (err) {
-        // A held button re-sends sosPressed:true every tick — "already
-        // active" is expected, not an error, once the first trigger lands.
-        if (!(err instanceof SosAlreadyActiveError)) throw err;
-      }
-    }
-
-    // Audit trail: entering a non-safe zone is a recorded violation.
-    for (const event of entered) {
-      if (event.zone?.type !== 'safe') {
-        const geoDoc = await GeofenceEvent.findById(event._id);
-        if (geoDoc) await recordProof('geofence_violation', 'GeofenceEvent', geoDoc);
-      }
-    }
-
-    // Phase 11: standing inside a danger zone is an automatic emergency,
-    // not just an admin-facing violation notice — no button press required.
-    for (const event of entered) {
-      if (event.zone?.type === 'danger') {
-        try {
-          await triggerSos({
-            tourist: req.device.tourist,
-            device: req.device._id,
-            location: { lat, lng },
-            source: 'auto_geofence',
-            io: req.app.get('io'),
-          });
-        } catch (err) {
-          if (!(err instanceof SosAlreadyActiveError)) throw err;
-        }
-      }
-    }
-
-    if (req.device.tourist) {
-      await evaluateRisk(req.device.tourist, req.app.get('io'));
-    }
-
-    const io = req.app.get('io');
-    if (io) {
-      const touristId = req.device.tourist?.toString();
-      await req.device.populate('tourist', 'name email');
-      const deviceUpdate = _safeDevice(req.device);
-
-      io.to('admin').emit('location:update', deviceUpdate);
-      if (touristId) io.to(`tourist:${touristId}`).emit('location:update', deviceUpdate);
-
-      for (const event of [...entered, ...exited]) {
-        const payload = { device: deviceUpdate.deviceId, tourist: deviceUpdate.tourist, ...event };
-        io.to('admin').emit('geofence:event', payload);
-        if (event.eventType === 'enter' && event.zone?.type !== 'safe') {
-          io.to('admin').emit('geofence:violation', payload);
-          if (touristId) io.to(`tourist:${touristId}`).emit('geofence:violation', payload);
-        }
-      }
-    }
 
     return res.json({ success: true, sosAcknowledged: Boolean(sosPressed) });
   } catch (err) {
@@ -215,10 +141,6 @@ async function ingestTelemetry(req, res, next) {
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-function _safeDevice(device) {
-  const obj = device.toObject ? device.toObject() : device;
-  delete obj.apiKeyHash;
-  return obj;
-}
+const _safeDevice = toSafeDevice;
 
 module.exports = { registerDevice, listDevices, getDevice, getTrail, ingestTelemetry };

@@ -1,4 +1,4 @@
-const { User, TouristProfile } = require('../models');
+const { User, TouristProfile, Device } = require('../models');
 
 // ── GET /api/tourists  (admin only) ──────────────────────────────────────────
 async function listTourists(req, res, next) {
@@ -15,13 +15,19 @@ async function listTourists(req, res, next) {
       .select('user device')
       .lean();
 
+    const devices = await Device.find({ _id: { $in: profiles.map((p) => p.device).filter(Boolean) } })
+      .select('type')
+      .lean();
+    const typeByDevice = {};
+    devices.forEach((d) => { typeByDevice[d._id.toString()] = d.type || 'wristband'; });
+
     const deviceByUser = {};
     profiles.forEach((p) => { deviceByUser[p.user.toString()] = p.device; });
 
-    const tourists = users.map((u) => ({
-      ...u,
-      device: deviceByUser[u._id.toString()] || null,
-    }));
+    const tourists = users.map((u) => {
+      const device = deviceByUser[u._id.toString()] || null;
+      return { ...u, device, deviceType: device ? typeByDevice[device.toString()] || null : null };
+    });
 
     res.json({ success: true, tourists });
   } catch (err) {

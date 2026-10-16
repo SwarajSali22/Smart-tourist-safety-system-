@@ -7,6 +7,7 @@ import { useNow } from '../../shared/hooks/useNow.js';
 import Card from '../../shared/components/ui/Card.jsx';
 import Badge from '../../shared/components/ui/Badge.jsx';
 import { SkeletonRows } from '../../shared/components/ui/Skeleton.jsx';
+import LocationShareCard from '../../shared/location/LocationShareCard.jsx';
 import { FACTOR_LABELS, label, RISK_VARIANT, timeAgo } from '../../shared/utils/format.js';
 
 const SOS_BADGE = { active: 'danger', acknowledged: 'warning', resolved: 'success', false_alarm: 'neutral' };
@@ -157,6 +158,8 @@ function TouristHome() {
       </div>
 
       <div className="tourist-sections">
+        <LocationShareCard />
+
         <Card title="Live map">
           <p className="placeholder-text">See your location and nearby safe, restricted and danger zones.</p>
           <Link className="btn btn--ghost btn--sm mt-4" to="/tourist/map">Open map</Link>

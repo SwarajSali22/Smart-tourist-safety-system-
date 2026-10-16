@@ -1,15 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { GEO_ERROR_MESSAGES as ERROR_MESSAGES, GEO_STATUS_BY_CODE as STATUS_BY_CODE } from '../location/geoErrors.js';
 
 const WATCH_OPTIONS = { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 };
-
-// GeolocationPositionError's numeric codes, kept here since the type is
-// only ever in scope inside the error callback itself.
-const ERROR_MESSAGES = {
-  1: 'Location permission was denied. Enable it in your browser/device settings to see your live position.',
-  2: 'Your position is currently unavailable. Move to an area with a clearer GPS/network signal.',
-  3: 'Getting your location timed out — retrying…',
-};
-const STATUS_BY_CODE = { 1: 'denied', 2: 'unavailable', 3: 'timeout' };
 
 /**
  * Wraps navigator.geolocation.watchPosition so a component can render a
@@ -21,18 +13,13 @@ const STATUS_BY_CODE = { 1: 'denied', 2: 'unavailable', 3: 'timeout' };
  */
 export function useLiveLocation() {
   const [position, setPosition] = useState(null); // { lat, lng, accuracy } | null
-  const [status, setStatus] = useState('idle'); // idle | loading | success | denied | unavailable | timeout | unsupported
-  const [error, setError] = useState('');
+  const supported = typeof navigator !== 'undefined' && 'geolocation' in navigator;
+  const [status, setStatus] = useState(supported ? 'idle' : 'unsupported'); // idle | loading | success | denied | unavailable | timeout | unsupported
+  const [error, setError] = useState(supported ? '' : 'This browser does not support geolocation.');
   const watchIdRef = useRef(null);
 
   useEffect(() => {
-    if (!('geolocation' in navigator)) {
-      setStatus('unsupported');
-      setError('This browser does not support geolocation.');
-      return;
-    }
-
-    setStatus('loading');
+    if (!supported) return undefined;
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
@@ -54,7 +41,7 @@ export function useLiveLocation() {
     return () => {
       if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current);
     };
-  }, []);
+  }, [supported]);
 
   return { position, status, error };
 }

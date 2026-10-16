@@ -55,5 +55,8 @@ export const FACTOR_LABELS = {
   connectivityScore: 'Device connectivity',
 };
 
+/** Where a tourist's position comes from: their phone's GPS or the wristband/simulator. */
+export const sourceLabel = (device) => (device?.type === 'phone' ? 'Phone' : 'Wristband');
+
 /** A device with no telemetry for this long is shown as possibly offline. */
 export const STALE_MS = 5 * 60 * 1000;

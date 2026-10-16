@@ -102,7 +102,7 @@ real backend and database during development (37 automated API checks plus headl
 | Session restore | Tokens kept in `localStorage`; `/auth/me` restores the user on reload. |
 | Role-based access | Admin and tourist areas are separate; the wrong role is redirected to its own home. Backend routes enforce roles too. |
 | Admin creation | Only via `scripts/seedAdmin.js` (no public admin sign-up). |
-| Device authentication | Each device gets a random API key shown **once**; only its bcrypt hash is stored. |
+| Device authentication | Each wristband/simulator gets a random API key shown **once**; only its bcrypt hash is stored. Phone devices have no key and cannot use the device-key route. |
 | Password show/hide | Eye toggle on login and register. |
 
 ### 3.2 Public pages
@@ -175,8 +175,12 @@ real backend and database during development (37 automated API checks plus headl
 - Shortcuts to the map and SOS; a banner when an SOS is open.
 
 **Map**
-- Zones, the tourist's own live browser location (green pulsing dot), their wristband position and recent route.
+- Zones, the tourist's own live browser location (green pulsing dot), their tracked device's position (phone or wristband) and recent route.
 - Clear fallbacks and messages if location permission is denied, unavailable or timed out.
+
+**Share my location (Home)**
+- A switch that sends the phone's GPS to the backend every 5 seconds while the app is open and the tab is visible. See [Phone GPS](#phone-gps-tourist-location-sharing).
+- Default ON as soon as the browser's location permission is granted; the choice is remembered. Shows Sharing / Blocked / No signal / Wristband states with friendly messages.
 
 **SOS**
 - Two-tap confirmation (the first tap "arms" it for 5 seconds; there is a Cancel button).
@@ -203,6 +207,7 @@ real backend and database during development (37 automated API checks plus headl
 |---|---|
 | **Geofencing** | Every telemetry ping is matched against zones (MongoDB geo query). Enter/exit events are logged; entering a non-safe zone raises a violation to the admin and the tourist. |
 | **Auto-SOS in a danger zone** | Entering a *danger* zone automatically triggers an SOS (no button press needed). |
+| **Phone GPS** | The tourist's phone reports its position to `POST /api/tourists/me/location`. It runs through the same pipeline as wristband telemetry (ping saved, geofencing, danger-zone auto-SOS, audit proofs, risk re-scoring, live sockets). |
 | **Wristband SOS button** | `sosPressed: true` in telemetry triggers an SOS. A held button only creates one SOS. |
 | **App SOS** | The tourist's SOS button creates the same SOS pipeline and re-scores risk immediately. |
 | **Emergency mode** | Any SOS sets the device's `emergencyMode` flag (this is what the real LED/buzzer will follow) until the incident is resolved. |
@@ -232,6 +237,7 @@ Base URL `http://localhost:5000/api`. Send `Authorization: Bearer <accessToken>`
 | Tourists | `GET /tourists` | admin |
 | | `GET /tourists/me` | tourist, admin |
 | | `PATCH /tourists/me/emergency-contacts`, `PATCH /tourists/me/itinerary` | tourist |
+| | `POST /tourists/me/location` — `{ lat, lng, accuracy? }`, max 1 per 3 s per user (429 otherwise) | tourist (JWT) |
 | Devices | `POST /devices`, `GET /devices` | admin |
 | | `GET /devices/:deviceId`, `GET /devices/:deviceId/trail?limit=` | admin or owning tourist |
 | | `POST /devices/:deviceId/telemetry` | device (`X-Device-Id` + `X-Api-Key`) |
@@ -269,6 +275,17 @@ Clients connect with their access token. Admins → `admin` room; tourists → `
 | `safetycheck:prompt`, `safetycheck:response`, `safetycheck:missed` | admin + that tourist | Check-in lifecycle |
 | `risk:updated` | admin + that tourist | New risk assessment |
 | `admin:alert` | admin | Generic alert (emitted by the backend; the UI listens to the specific events above instead) |
+
+---
+
+### Phone GPS (tourist location sharing)
+
+- **Endpoint:** `POST /api/tourists/me/location` with `{ "lat": number, "lng": number, "accuracy"?: number }`. Auth: the tourist's normal JWT (no device key). Validated (lat -90..90, lng -180..180); invalid input returns `400 { success: false, message }`. Limited to **1 request per 3 seconds per user** (`429` otherwise).
+- **What it does:** on the first report the backend auto-creates a device with `type: "phone"` (id `PHONE-xxxxxxxx`) and links it to the tourist, then runs the shared telemetry service (`backend/src/services/telemetry/processTelemetry.js`): saves a `LocationPing`, runs geofencing, auto-SOS in danger zones, writes audit proofs for violations, re-scores risk, and emits `location:update` / `geofence:*`. Wristband telemetry uses the very same service.
+- **Response:** `{ success: true, accepted: true, deviceId }`. If the tourist already has a wristband (or simulator), the response is `{ success: true, accepted: false, reason: "wristband_assigned" }` and nothing is recorded — the system assumes one tracking device per tourist. The app then shows "Your wristband is your tracker".
+- **Emergencies are preserved:** a phone ping never clears an SOS/emergency already in progress (a wristband's held button can; a phone has no button).
+- **Admins:** phone-tracked tourists appear on the live map, dashboard, directory and Devices page exactly like wristband ones, labelled **Phone** or **Wristband**. An admin can still register a wristband for a phone-tracked tourist; it replaces the phone device. Phone-tracked tourists also receive safety check-ins.
+- **Client:** `useLocationReporter` (watches `navigator.geolocation`, sends every 5 s while the tab is visible, stops on logout) inside `LocationSharingProvider`, switched from the "Share my location" card on tourist Home.
 
 ---
 
@@ -375,7 +392,7 @@ Be aware of these when presenting or deploying:
 
 - **Real hardware:** the ESP32 wristband firmware (`firmware/` is only a placeholder). The simulator uses the same API the hardware will.
 - **Cloud deployment** (Render / Vercel / Atlas network access) and any HTTPS setup.
-- **The tourist's browser GPS is display-only** — it is not sent to the backend. Positions come from the device/simulator.
+- **One device per tourist.** Risk, SOS and the scheduler look the device up by tourist, so phone GPS is only recorded for tourists who have no wristband (details in *Phone GPS* below).
 - **SMS needs Twilio keys** you provide; it has not been tried against real phone numbers. Trial accounts only reach verified numbers.
 - **No automated test suite or CI** in the repo; no rate limiting, security headers (helmet) or request-validation library on the backend. Tokens are kept in `localStorage`.
 - **Not implemented:** trained ML/anomaly models, route-deviation detection, multi-language and voice SOS, installable PWA / offline SOS queue, a police-responder role, QR digital tourist ID, public-blockchain anchoring, email/push notifications to contacts.

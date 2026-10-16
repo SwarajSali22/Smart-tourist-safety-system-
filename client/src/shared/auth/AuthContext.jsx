@@ -6,12 +6,12 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null);
-  const [loading, setLoading] = useState(true); // true while we re-hydrate from storage
+  const [loading, setLoading] = useState(() => Boolean(tokens.getAccess())); // true while we re-hydrate from storage
 
   // Re-hydrate: if tokens exist in localStorage, fetch the current user
   useEffect(() => {
     const access = tokens.getAccess();
-    if (!access) { setLoading(false); return; }
+    if (!access) return;
 
     api.get('/auth/me')
       .then((data) => setUser(data.user))
