@@ -43,7 +43,7 @@ async function escalateRisk(riskAssessment, io) {
     await recordProof('incident_opened', 'Incident', incident);
   }
 
-  await incident.populate('tourist', 'name email');
+  await incident.populate('tourist', 'name email isDemo');
 
   if (io) {
     io.to('admin').emit('admin:alert', { type: 'risk', riskAssessment, incident });

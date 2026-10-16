@@ -22,7 +22,7 @@ async function _escalate(safetyCheck, { severity, type, action, actorLabel }, io
   safetyCheck.incident = incident._id;
   await safetyCheck.save();
   await recordProof('incident_opened', 'Incident', incident);
-  await incident.populate('tourist', 'name email');
+  await incident.populate('tourist', 'name email isDemo');
 
   // A discrete, meaningful event — always re-evaluate, bypassing the
   // telemetry-path throttle in evaluateRisk.

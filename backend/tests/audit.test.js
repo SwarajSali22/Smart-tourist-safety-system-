@@ -27,7 +27,11 @@ describe('audit hash chain (a tamper-evident DATABASE chain — not a public blo
     assert.deepEqual(proofs.map((p) => p.chainRef.sequenceNo), proofs.map((_, i) => i + 1));
     assert.equal(proofs[0].chainRef.previousHash, null);
     assert.equal(proofs[1].chainRef.previousHash, proofs[0].chainHash);
-    assert.deepEqual(await verifyChain(), { valid: true, length: proofs.length, headHash: proofs.at(-1).chainHash });
+    const chain = await verifyChain();
+    assert.equal(chain.valid, true);
+    assert.equal(chain.length, proofs.length);
+    assert.equal(chain.headHash, proofs.at(-1).chainHash);
+    assert.deepEqual(chain.demo, { valid: true, length: 0, headHash: null }, 'no simulated events yet');
   });
 
   test('untouched records verify', async () => {
@@ -111,6 +115,45 @@ describe('audit hash chain (a tamper-evident DATABASE chain — not a public blo
       models.AuditProof.findById = original;
       console.error = origErr;
     }
+  });
+
+  test('simulated (demo) events are chained separately, so deleting them cannot break the real chain', async () => {
+    const realBefore = await verifyChain();
+    const demo = await h.createUser('tourist', { isDemo: true });
+    const dd = await h.createDevice(demo.user, { isDemo: true });
+    const { sosEvent } = await triggerSos({ tourist: demo.user._id, device: dd.device._id, location: { lat: 3, lng: 3 }, source: 'app' });
+    const demoProofs = await models.AuditProof.find({ isDemo: true }).sort({ 'chainRef.sequenceNo': 1 });
+    assert.ok(demoProofs.length >= 2);
+    assert.deepEqual(demoProofs.map((p) => p.chainRef.sequenceNo), demoProofs.map((_, i) => i + 1), 'the demo chain has its own numbering');
+    assert.equal(demoProofs[0].chainRef.previousHash, null);
+
+    const realAfter = await verifyChain();
+    assert.equal(realAfter.length, realBefore.length, 'demo events must not appear in the real chain');
+    assert.equal(realAfter.headHash, realBefore.headHash);
+    assert.equal(realAfter.demo.valid, true);
+    assert.equal(realAfter.demo.length, demoProofs.length);
+    assert.equal((await verify(demoProofs[0]._id)).status, 'verified');
+
+    // "reset": remove the whole simulated chain + data
+    await models.AuditProof.deleteMany({ isDemo: true });
+    await models.SOSEvent.deleteOne({ _id: sosEvent._id });
+    const cleaned = await verifyChain();
+    assert.equal(cleaned.valid, true, 'the real chain is untouched by the demo reset');
+    assert.equal(cleaned.length, realBefore.length);
+    assert.equal(cleaned.demo.length, 0);
+  });
+
+  test('the proof list can be filtered to real or simulated proofs', async () => {
+    const demo = await h.createUser('tourist', { isDemo: true });
+    const dd = await h.createDevice(demo.user, { isDemo: true });
+    await triggerSos({ tourist: demo.user._id, device: dd.device._id, location: { lat: 4, lng: 4 }, source: 'app' });
+    const all = await request(app).get('/api/blockchain?limit=100').set(auth(admin.token)).expect(200);
+    const real = await request(app).get('/api/blockchain?demo=0&limit=100').set(auth(admin.token)).expect(200);
+    const sim = await request(app).get('/api/blockchain?demo=1&limit=100').set(auth(admin.token)).expect(200);
+    assert.ok(real.body.proofs.every((p) => !p.isDemo));
+    assert.ok(sim.body.proofs.length >= 2 && sim.body.proofs.every((p) => p.isDemo));
+    assert.equal(all.body.total, real.body.total + sim.body.total);
+    await models.AuditProof.deleteMany({ isDemo: true });
   });
 
   test('unknown proofs are 404, malformed ids 400, non-admins 403', async () => {

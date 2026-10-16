@@ -5,12 +5,14 @@ const { verifyProof, verifyChain } = require('../services/blockchain/auditChain'
 async function listProofs(req, res, next) {
   try {
     const limit = Math.min(Number(req.query.limit) || 100, 500);
-    const proofs = await AuditProof.find()
+    // ?demo=1 → only simulated proofs, ?demo=0 → only real ones, default: both (newest first)
+    const filter = req.query.demo === '1' ? { isDemo: true } : req.query.demo === '0' ? { isDemo: { $ne: true } } : {};
+    const proofs = await AuditProof.find(filter)
       .select('-canonicalPayload')
-      .sort({ 'chainRef.sequenceNo': -1 })
+      .sort({ createdAt: -1, 'chainRef.sequenceNo': -1 })
       .limit(limit)
       .lean();
-    const total = await AuditProof.estimatedDocumentCount();
+    const total = await AuditProof.countDocuments(filter);
     return res.json({ success: true, proofs, total });
   } catch (err) {
     next(err);

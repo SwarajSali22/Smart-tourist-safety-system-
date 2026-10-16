@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { AuditProof, SOSEvent, Incident, GeofenceEvent, RiskAssessment } = require('../../models');
+const { AuditProof, SOSEvent, Incident, GeofenceEvent, RiskAssessment, User } = require('../../models');
 
 /**
  * Internal SHA-256 hash-chain (Phase 14). MongoDB stays the system of record;
@@ -92,16 +92,33 @@ const chainHashOf = ({ previousHash, sequenceNo, eventType, dataHash }) =>
 // (single backend instance assumed — see docs if scaling out).
 let queue = Promise.resolve();
 
+// Real and simulated events live in two independent chains.
+const partition = (isDemo) => (isDemo ? { isDemo: true } : { isDemo: { $ne: true } });
+
+async function _isDemoEvent(doc) {
+  const tourist = idOf(doc.tourist);
+  if (!tourist) return false; // e.g. resolution records carry no tourist: fall back to the real chain
+  const u = await User.findById(tourist).select('isDemo').lean();
+  return Boolean(u?.isDemo);
+}
+
 async function _record(eventType, eventModel, doc) {
   const payload = PAYLOAD[eventType](doc);
   const dataHash = sha256(canonicalize(payload));
-  const last = await AuditProof.findOne().sort({ 'chainRef.sequenceNo': -1 }).select('chainHash chainRef');
+  let isDemo = await _isDemoEvent(doc);
+  if (!isDemo && !doc.tourist) {
+    // sos_resolved / incident_resolved / incident_assigned: follow the source record's tourist
+    const src = await MODELS[eventModel].findById(doc._id).select('tourist').lean();
+    isDemo = src?.tourist ? await _isDemoEvent(src) : false;
+  }
+  const last = await AuditProof.findOne(partition(isDemo)).sort({ 'chainRef.sequenceNo': -1 }).select('chainHash chainRef');
   const sequenceNo = last ? last.chainRef.sequenceNo + 1 : 1;
   const previousHash = last ? last.chainHash : null;
   return AuditProof.create({
     eventType,
     eventModel,
     eventRef: doc._id,
+    isDemo,
     dataHash,
     canonicalPayload: payload,
     chainRef: { previousHash, sequenceNo },
@@ -155,8 +172,8 @@ async function verifyProof(proofId) {
   };
 }
 
-async function verifyChain() {
-  const proofs = await AuditProof.find().sort({ 'chainRef.sequenceNo': 1 }).limit(10000).lean();
+async function _verifyPartition(isDemo) {
+  const proofs = await AuditProof.find(partition(isDemo)).sort({ 'chainRef.sequenceNo': 1 }).limit(10000).lean();
   let prev = null;
   let expectedSeq = 1;
   for (const p of proofs) {
@@ -181,6 +198,15 @@ async function verifyChain() {
     expectedSeq += 1;
   }
   return { valid: true, length: proofs.length, headHash: prev ? prev.chainHash : null };
+}
+
+/**
+ * Verifies the REAL chain (the top-level fields) and reports the simulated chain
+ * separately under `demo` — demo data can come and go without affecting real records.
+ */
+async function verifyChain() {
+  const [real, demo] = await Promise.all([_verifyPartition(false), _verifyPartition(true)]);
+  return { ...real, demo };
 }
 
 module.exports = { recordProof, verifyProof, verifyChain, canonicalize };

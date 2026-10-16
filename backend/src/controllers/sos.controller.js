@@ -57,7 +57,7 @@ async function listSos(req, res, next) {
     if (req.query.status) filter.status = req.query.status;
 
     const events = await SOSEvent.find(filter)
-      .populate('tourist', 'name email')
+      .populate('tourist', 'name email isDemo')
       .sort({ createdAt: -1 })
       .limit(100)
       .lean();

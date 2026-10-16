@@ -8,7 +8,7 @@ async function listGeofenceEvents(req, res, next) {
     if (req.query.resolved === 'false') filter.resolved = false;
 
     const events = await GeofenceEvent.find(filter)
-      .populate('tourist', 'name email')
+      .populate('tourist', 'name email isDemo')
       .populate('zone', 'name type')
       .sort({ createdAt: -1 })
       .limit(100)

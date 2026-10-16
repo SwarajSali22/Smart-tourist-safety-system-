@@ -105,7 +105,7 @@ async function listChecks(req, res, next) {
     if (req.query.escalated === 'false') filter.escalated = false;
 
     const checks = await SafetyCheck.find(filter)
-      .populate('tourist', 'name email')
+      .populate('tourist', 'name email isDemo')
       .sort({ scheduledAt: -1 })
       .limit(100)
       .lean();

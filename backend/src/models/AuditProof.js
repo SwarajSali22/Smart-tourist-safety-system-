@@ -59,6 +59,9 @@ const auditProofSchema = new mongoose.Schema(
       txHash: { type: String, default: null },
       anchoredAt: { type: Date, default: null },
     },
+    // Simulated (demo) events are chained SEPARATELY from real ones, so the demo reset can
+    // delete them without breaking the real chain.
+    isDemo: { type: Boolean, default: false },
     verified: {
       type: Boolean,
       default: false,
@@ -73,5 +76,6 @@ const auditProofSchema = new mongoose.Schema(
 
 auditProofSchema.index({ eventRef: 1 });
 auditProofSchema.index({ 'chainRef.sequenceNo': 1 });
+auditProofSchema.index({ isDemo: 1, 'chainRef.sequenceNo': 1 });
 
 module.exports = mongoose.model('AuditProof', auditProofSchema);

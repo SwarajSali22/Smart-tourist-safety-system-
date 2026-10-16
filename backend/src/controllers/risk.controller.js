@@ -20,7 +20,7 @@ async function listLatestRisk(req, res, next) {
       { $replaceRoot: { newRoot: '$doc' } },
       { $sort: { score: -1 } },
     ]);
-    await RiskAssessment.populate(latest, { path: 'tourist', select: 'name email' });
+    await RiskAssessment.populate(latest, { path: 'tourist', select: 'name email isDemo' });
     return res.json({ success: true, assessments: latest });
   } catch (err) {
     next(err);

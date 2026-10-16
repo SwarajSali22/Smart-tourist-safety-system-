@@ -100,6 +100,7 @@ async function getIncident(req, res, next) {
       const rows = await Notification.find({ channel: 'sms', 'payload.sosEvent': incident.sourceRef.refId }).select('delivered error payload.contact createdAt').lean();
       sms = {
         configured: smsConfigured(),
+        simulated: Boolean(incident.tourist?.isDemo), // demo data never sends real SMS
         sent: rows.filter((r) => r.delivered).length,
         failed: rows.filter((r) => !r.delivered).length,
         attempts: rows.map((r) => ({ contact: r.payload?.contact, delivered: r.delivered, error: r.error || null, at: r.createdAt })),

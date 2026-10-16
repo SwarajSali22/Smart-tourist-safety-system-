@@ -71,7 +71,7 @@ async function evaluateRisk(touristId, io, { force = false } = {}) {
     }
   }
 
-  await riskAssessment.populate('tourist', 'name email');
+  await riskAssessment.populate('tourist', 'name email isDemo');
 
   if (io) {
     io.to('admin').emit('risk:updated', riskAssessment);

@@ -35,8 +35,9 @@ async function notifyEmergencyContacts({ touristId, sosEvent }) {
     if (!isConfigured()) return;
     const [profile, user] = await Promise.all([
       TouristProfile.findOne({ user: touristId }).lean(),
-      User.findById(touristId).select('name').lean(),
+      User.findById(touristId).select('name isDemo').lean(),
     ]);
+    if (user?.isDemo) return; // simulated tourists never trigger real texts
     const contacts = profile?.emergencyContacts || [];
     const { lat, lng } = sosEvent.location;
     const body =

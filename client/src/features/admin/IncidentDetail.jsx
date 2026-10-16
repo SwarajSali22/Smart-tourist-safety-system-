@@ -234,8 +234,9 @@ function IncidentDetail() {
                 <dt>Sent</dt><dd>{formatDateTime(sosEvent.createdAt)}</dd>
                 <dt>SMS to contacts</dt>
                 <dd>
-                  {!sms?.configured && sms?.attempts.length === 0 && 'Not sent — SMS alerts are not configured on this server.'}
-                  {sms?.configured && sms.attempts.length === 0 && 'No emergency contacts on file, so nothing was sent.'}
+                  {sms?.simulated && 'Not sent — this is simulated demo data; no real SMS is ever sent for it.'}
+                  {!sms?.simulated && !sms?.configured && sms?.attempts.length === 0 && 'Not sent — SMS alerts are not configured on this server.'}
+                  {!sms?.simulated && sms?.configured && sms.attempts.length === 0 && 'No emergency contacts on file, so nothing was sent.'}
                   {sms?.attempts.length > 0 && `${sms.sent} sent, ${sms.failed} failed${sms.failed ? ` (${sms.attempts.find((a) => !a.delivered)?.error})` : ''}`}
                 </dd>
               </dl>

@@ -68,8 +68,8 @@ async function triggerSos({ tourist, device, location, source, io }) {
     await Device.findByIdAndUpdate(device, { emergencyMode: true, status: 'emergency' });
   }
 
-  await sosEvent.populate('tourist', 'name email');
-  await incident.populate('tourist', 'name email');
+  await sosEvent.populate('tourist', 'name email isDemo');
+  await incident.populate('tourist', 'name email isDemo');
 
   if (io) {
     const payload = { sosEvent, incident };
