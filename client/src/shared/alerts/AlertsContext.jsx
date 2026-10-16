@@ -4,7 +4,8 @@ import { connectSocket } from '../socket/socket.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { useToast } from '../components/ui/Toast.jsx';
 import { useOnReconnect } from '../socket/useSocketStatus.js';
-import { label, RISK_RANK } from '../utils/format.js';
+import { useI18n } from '../i18n/I18nContext.jsx';
+import { RISK_RANK } from '../utils/format.js';
 
 const AlertsContext = createContext(null);
 
@@ -55,6 +56,9 @@ export function AlertsProvider({ children }) {
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission
   );
   const mutedRef = useRef(muted);
+  const i18n = useI18n();
+  const i18nRef = useRef(i18n); // tourist toasts use the language chosen right now
+  useEffect(() => { i18nRef.current = i18n; });
   const riskSeen = useRef(new Map());
 
   useEffect(() => { mutedRef.current = muted; }, [muted]);
@@ -138,24 +142,30 @@ export function AlertsProvider({ children }) {
     const onSos = (p) => { const e = p.sosEvent || p; upsertSos(e); };
     const onSosUpdated = (e) => {
       upsertSos(e);
-      if (e?.status === 'acknowledged') push('sos', 'Help is on the way', 'An admin has acknowledged your SOS and is responding.', { link: '/tourist/sos', variant: 'success' });
-      if (e?.status === 'resolved') push('sos', 'SOS resolved', 'Your SOS has been marked resolved.', { link: '/tourist/sos', variant: 'success' });
+      const { t } = i18nRef.current;
+      if (e?.status === 'acknowledged') push('sos', t('alert.help.title'), t('alert.help.body'), { link: '/tourist/sos', variant: 'success' });
+      if (e?.status === 'resolved') push('sos', t('alert.resolved.title'), t('alert.resolved.body'), { link: '/tourist/sos', variant: 'success' });
     };
     const onViolation = (p) => {
-      const name = p.zone?.name || 'a restricted area';
+      const { t } = i18nRef.current;
+      const name = p.zone?.name || '—';
       const danger = p.zone?.type === 'danger';
       setZoneNotice({ name, danger });
-      push('geofence', 'Zone alert', `You have entered ${name}. ${danger ? 'This is a danger zone — move to safety.' : 'Please check the area rules.'}`, {
+      push('geofence', t('alert.zone.title'), t(danger ? 'alert.zone.bodyDanger' : 'alert.zone.body', { zone: name }), {
         link: '/tourist/map', variant: danger ? 'danger' : 'warning', loud: danger,
       });
     };
-    const onPrompt = () => push('checkin', 'Safety check-in', 'Please open Check-ins and tell us you are safe.', { link: '/tourist/checks', variant: 'info', loud: true });
+    const onPrompt = () => {
+      const { t } = i18nRef.current;
+      push('checkin', t('alert.checkin.title'), t('alert.checkin.body'), { link: '/tourist/checks', variant: 'info', loud: true });
+    };
     const onRisk = (r) => {
       const rank = RISK_RANK[r.level];
       const prev = riskSeen.current.get('me') ?? 0;
       riskSeen.current.set('me', rank);
       if (rank >= RISK_RANK.high && rank > prev) {
-        push('risk', 'Risk rising', `Your risk level is now ${label(r.level)}. Stay alert and consider moving to a safer area.`, { link: '/tourist', variant: 'warning' });
+        const { t, label } = i18nRef.current;
+        push('risk', t('alert.risk.title'), t('alert.risk.body', { level: label(r.level) }), { link: '/tourist', variant: 'warning' });
       }
     };
 

@@ -21,6 +21,7 @@ function DataTable({
   emptyIcon,
   emptyTitle = 'Nothing here yet',
   emptyText,
+  emptyAction,
   onRowClick,
   expandedId,
   renderExpanded,
@@ -83,7 +84,7 @@ function DataTable({
       )}
 
       {rows.length === 0 ? (
-        <EmptyState icon={emptyIcon} title={emptyTitle}>{emptyText}</EmptyState>
+        <EmptyState icon={emptyIcon} title={emptyTitle} action={emptyAction}>{emptyText}</EmptyState>
       ) : sorted.length === 0 ? (
         <EmptyState title="No matches">Try a different search or clear the filters.</EmptyState>
       ) : (

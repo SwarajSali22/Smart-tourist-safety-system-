@@ -2,39 +2,33 @@ import { useId } from 'react';
 import Card from '../components/ui/Card.jsx';
 import Badge from '../components/ui/Badge.jsx';
 import { useNow } from '../hooks/useNow.js';
-import { timeAgo } from '../utils/format.js';
+import { useI18n } from '../i18n/I18nContext.jsx';
 import { useLocationSharing } from './LocationSharingContext.jsx';
 
-const STATUS_BADGE = {
-  off: ['neutral', 'Off'],
-  waiting: ['info', 'Locating…'],
-  sharing: ['success', 'Sharing'],
-  denied: ['danger', 'Blocked'],
-  unavailable: ['warning', 'No signal'],
-  timeout: ['warning', 'Searching…'],
-  unsupported: ['neutral', 'Unsupported'],
-  wristband: ['info', 'Wristband'],
-  error: ['warning', 'Problem'],
+const BADGE_VARIANT = {
+  off: 'neutral', waiting: 'info', sharing: 'success', denied: 'danger', unavailable: 'warning',
+  timeout: 'warning', unsupported: 'neutral', wristband: 'info', error: 'warning',
 };
 
 /** "Share my location" switch + live status, for the tourist Home page. */
 function LocationShareCard() {
-  const { sharing, setShare, status, error, lastSentAt } = useLocationSharing();
+  const { t, timeAgo } = useI18n();
+  const { sharing, setShare, status, lastSentAt } = useLocationSharing();
   const now = useNow(5000);
   const switchId = useId();
-  const [variant, text] = STATUS_BADGE[status] || STATUS_BADGE.off;
 
   let detail;
-  if (status === 'sharing') detail = `Your phone’s location is shared with the safety team${lastSentAt ? ` — last sent ${timeAgo(lastSentAt, now)}` : ''}.`;
-  else if (status === 'wristband') detail = 'Your wristband is your tracker, so your phone’s location isn’t needed.';
-  else if (status === 'waiting') detail = 'Waiting for a location fix from your phone…';
-  else if (status === 'off') detail = 'Turn this on so admins can see where you are and respond faster in an emergency.';
-  else detail = error;
+  if (status === 'sharing') detail = lastSentAt ? t('loc.detail.sharingWhen', { when: timeAgo(lastSentAt, now) }) : t('loc.detail.sharing');
+  else if (status === 'wristband') detail = t('loc.detail.wristband');
+  else if (status === 'waiting') detail = t('loc.detail.waiting');
+  else if (status === 'off') detail = t('loc.detail.off');
+  else if (status === 'error') detail = t('loc.detail.error');
+  else detail = t(`geo.${status}`); // denied | unavailable | timeout | unsupported
 
   return (
-    <Card title="Share my location">
+    <Card title={t('loc.title')}>
       <div className="status-row">
-        <label htmlFor={switchId} className="switch-label">Share my phone’s location</label>
+        <label htmlFor={switchId} className="switch-label">{t('loc.switch')}</label>
         <button
           id={switchId}
           type="button"
@@ -47,7 +41,7 @@ function LocationShareCard() {
         </button>
       </div>
       <p className="mt-4">
-        <Badge variant={variant}>{text}</Badge>
+        <Badge variant={BADGE_VARIANT[status] || 'neutral'}>{t(`loc.badge.${status}`)}</Badge>
       </p>
       <p className="placeholder-text mt-4" role="status" aria-live="polite">{detail}</p>
     </Card>

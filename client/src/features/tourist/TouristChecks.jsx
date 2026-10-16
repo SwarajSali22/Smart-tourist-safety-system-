@@ -4,13 +4,15 @@ import { connectSocket } from '../../shared/socket/socket.js';
 import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
 import { useNow } from '../../shared/hooks/useNow.js';
 import { useToast } from '../../shared/components/ui/Toast.jsx';
+import { useI18n } from '../../shared/i18n/I18nContext.jsx';
 import Card from '../../shared/components/ui/Card.jsx';
 import Badge from '../../shared/components/ui/Badge.jsx';
-import { formatDateTime, label } from '../../shared/utils/format.js';
+import { formatDateTime } from '../../shared/utils/format.js';
 
 const RESPONSE_BADGE = { safe: 'success', unsafe: 'danger', no_response: 'neutral' };
 
 function TouristChecks() {
+  const { t, label } = useI18n();
   const toast = useToast();
   const now = useNow(1000);
   const [check, setCheck] = useState(undefined); // undefined = loading
@@ -53,10 +55,10 @@ function TouristChecks() {
     try {
       const data = await api.post(`/safety-checks/${check._id}/respond`, { response });
       setCheck(data.safetyCheck);
-      if (response === 'safe') toast.success('Thanks — glad you’re safe.');
-      else toast.warning('An admin has been alerted that you need help.', { title: 'Help requested' });
+      if (response === 'safe') toast.success(t('checks.toast.safe'));
+      else toast.warning(t('checks.toast.help'), { title: t('checks.toast.helpTitle') });
     } catch (err) {
-      setError(err.message || 'Failed to respond');
+      setError(err.message || t('checks.error'));
     } finally {
       setResponding(false);
     }
@@ -64,42 +66,40 @@ function TouristChecks() {
 
   return (
     <div className="app-page">
-      <h1 className="page-title">Safety check-ins</h1>
+      <h1 className="page-title">{t('checks.title')}</h1>
 
       <Card>
         {error && <p className="form-error" role="alert">{error}</p>}
 
         {check === undefined ? (
-          <p className="placeholder-text">Loading…</p>
+          <p className="placeholder-text">{t('common.loading')}</p>
         ) : check === null ? (
-          <p className="placeholder-text">No safety checks yet — one will be prompted periodically while your device is active.</p>
+          <p className="placeholder-text">{t('checks.none')}</p>
         ) : isPending ? (
           <>
-            <p className="sos-hint"><strong>Are you safe?</strong></p>
+            <p className="sos-hint"><strong>{t('checks.areYouSafe')}</strong></p>
             <p className="form-hint">
-              {remaining
-                ? <>Please answer within <strong>{remaining}</strong>. If you don’t, we’ll treat it as an emergency.</>
-                : 'The response window has passed. Answer now so we know you’re OK.'}
+              {remaining ? t('checks.answerWithin', { time: remaining }) : t('checks.late')}
             </p>
             <div className="contact-actions">
               <button className="btn btn--primary" disabled={responding} onClick={() => handleRespond('safe')}>
-                I’m safe
+                {t('checks.safe')}
               </button>
               <button className="btn btn--danger" disabled={responding} onClick={() => handleRespond('unsafe')}>
-                I need help
+                {t('checks.help')}
               </button>
             </div>
-            <p className="form-hint mt-4">Choosing “I need help” alerts an admin right away.</p>
+            <p className="form-hint mt-4">{t('checks.helpHint')}</p>
           </>
         ) : (
           <>
             <div className="status-row">
-              <span>Last check-in</span>
+              <span>{t('checks.last')}</span>
               <Badge variant={RESPONSE_BADGE[check.response]}>{label(check.response)}</Badge>
             </div>
             <p className="form-hint mt-4">
-              Asked {formatDateTime(check.scheduledAt)}
-              {config ? ` · next one about ${config.intervalMinutes} minutes later while your device is active.` : '.'}
+              {t('checks.asked', { when: formatDateTime(check.scheduledAt) })}
+              {config ? t('checks.next', { n: config.intervalMinutes }) : ''}
             </p>
           </>
         )}

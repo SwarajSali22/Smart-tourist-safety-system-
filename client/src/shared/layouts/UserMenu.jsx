@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, LogOut } from 'lucide-react';
+import { useI18n } from '../i18n/I18nContext.jsx';
 
 /** Avatar button + dropdown with the signed-in user's details and Logout. */
 function UserMenu({ user, onLogout }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -28,7 +30,7 @@ function UserMenu({ user, onLogout }) {
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="true"
         aria-expanded={open}
-        aria-label={`Account menu for ${user?.name || 'user'}`}
+        aria-label={t('menu.account', { name: user?.name || '' })}
       >
         <span className="user-menu__avatar" aria-hidden="true">{initial}</span>
         <span className="user-menu__name">{user?.name}</span>
@@ -43,7 +45,7 @@ function UserMenu({ user, onLogout }) {
             <span className="badge badge--info">{user?.role}</span>
           </div>
           <button type="button" role="menuitem" className="user-menu__item" onClick={onLogout}>
-            <LogOut size={16} aria-hidden="true" /> Log out
+            <LogOut size={16} aria-hidden="true" /> {t('menu.logout')}
           </button>
         </div>
       )}

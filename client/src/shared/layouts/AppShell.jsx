@@ -9,10 +9,12 @@ import { ThemeToggle } from '../theme/ThemeContext.jsx';
 import { NAV, ROLE_HOME, ROLE_TITLE } from '../navConfig.js';
 import UserMenu from './UserMenu.jsx';
 import { LocationSharingProvider } from '../location/LocationSharingContext.jsx';
+import { I18nProvider, LanguageSwitcher, useI18n } from '../i18n/I18nContext.jsx';
 
 /** Red banner while an SOS is open: admins see all active SOS, a tourist sees their own. */
 function SosBanner({ role }) {
   const { activeSos } = useAlerts();
+  const { t } = useI18n();
   if (activeSos.length === 0) return null;
 
   if (role === 'tourist') {
@@ -21,10 +23,10 @@ function SosBanner({ role }) {
       <div className="sos-banner" role="alert">
         <Siren size={18} aria-hidden="true" />
         <span>
-          <strong>Your SOS is {sos.status === 'acknowledged' ? 'acknowledged' : 'active'}.</strong>{' '}
-          {sos.status === 'acknowledged' ? 'An admin is responding.' : 'Help has been alerted.'}
+          <strong>{sos.status === 'acknowledged' ? t('shell.sos.acknowledged') : t('shell.sos.active')}</strong>{' '}
+          {sos.status === 'acknowledged' ? t('shell.sos.responding') : t('shell.sos.alerted')}
         </span>
-        <Link to="/tourist/sos" className="btn btn--sm sos-banner__btn">View status</Link>
+        <Link to="/tourist/sos" className="btn btn--sm sos-banner__btn">{t('shell.sos.view')}</Link>
       </div>
     );
   }
@@ -48,15 +50,13 @@ function SosBanner({ role }) {
 /** Persistent notice after a tourist enters a restricted/danger zone. */
 function ZoneBanner() {
   const { zoneNotice, dismissZoneNotice } = useAlerts();
+  const { t } = useI18n();
   if (!zoneNotice) return null;
   return (
     <div className={`zone-banner${zoneNotice.danger ? ' zone-banner--danger' : ''}`} role="alert">
       <TriangleAlert size={18} aria-hidden="true" />
-      <span>
-        You entered <strong>{zoneNotice.name}</strong>
-        {zoneNotice.danger ? ' — a danger zone. Move to safety or press SOS.' : '.'}
-      </span>
-      <button type="button" className="icon-btn" onClick={dismissZoneNotice} aria-label="Dismiss zone alert">
+      <span>{zoneNotice.danger ? t('shell.zone.enterDanger', { zone: zoneNotice.name }) : t('shell.zone.enter', { zone: zoneNotice.name })}</span>
+      <button type="button" className="icon-btn" onClick={dismissZoneNotice} aria-label={t('shell.zone.dismiss')}>
         <X size={16} aria-hidden="true" />
       </button>
     </div>
@@ -67,7 +67,9 @@ function ShellInner() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const role = user.role;
+  const { t } = useI18n();
   const items = NAV[role];
+  const text = (item) => (item.labelKey ? t(item.labelKey) : item.label);
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Mobile tab bar: items flagged `mobile` (admin: 4 + "More"), or all of them (tourist: 5).
@@ -106,10 +108,10 @@ function ShellInner() {
           </button>
         </div>
         <nav className="app-nav" aria-label={role === 'admin' ? 'Admin' : 'Main'}>
-          {items.map(({ to, label, icon: Icon, end }) => (
-            <NavLink key={to} to={to} end={end} className={linkClass} onClick={() => setMenuOpen(false)}>
-              <Icon size={18} aria-hidden="true" />
-              {label}
+          {items.map((item) => (
+            <NavLink key={item.to} to={item.to} end={item.end} className={linkClass} onClick={() => setMenuOpen(false)}>
+              <item.icon size={18} aria-hidden="true" />
+              {text(item)}
             </NavLink>
           ))}
         </nav>
@@ -129,6 +131,7 @@ function ShellInner() {
           </button>
           <Link to={ROLE_HOME[role]} className="app-topbar__brand">{ROLE_TITLE[role]}</Link>
           <div className="app-topbar__tools">
+            {role === 'tourist' && <LanguageSwitcher />}
             <ConnectionStatus />
             <AlertBell />
             <ThemeToggle />
@@ -145,15 +148,15 @@ function ShellInner() {
       </div>
 
       <nav className="app-bottom" aria-label="Main (mobile)" style={{ '--tabs': tabs.length + (hasMore ? 1 : 0) }}>
-        {tabs.map(({ to, label, icon: Icon, end, sos }) => (
+        {tabs.map((item) => (
           <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) => 'app-tab' + (isActive ? ' app-tab--active' : '') + (sos ? ' app-tab--sos' : '')}
+            key={item.to}
+            to={item.to}
+            end={item.end}
+            className={({ isActive }) => 'app-tab' + (isActive ? ' app-tab--active' : '') + (item.sos ? ' app-tab--sos' : '')}
           >
-            <span className="app-tab__icon"><Icon size={sos ? 22 : 20} aria-hidden="true" /></span>
-            <span>{label}</span>
+            <span className="app-tab__icon"><item.icon size={item.sos ? 22 : 20} aria-hidden="true" /></span>
+            <span>{text(item)}</span>
           </NavLink>
         ))}
         {hasMore && (
@@ -176,7 +179,12 @@ function AppShell() {
     </AlertsProvider>
   );
   // Tourists' phones report their GPS app-wide while signed in (unmounts on logout).
-  return user?.role === 'tourist' ? <LocationSharingProvider>{shell}</LocationSharingProvider> : shell;
+  // The tourist area also gets i18n (English / हिन्दी / मराठी); the admin area stays English.
+  return user?.role === 'tourist' ? (
+    <I18nProvider>
+      <LocationSharingProvider>{shell}</LocationSharingProvider>
+    </I18nProvider>
+  ) : shell;
 }
 
 export default AppShell;

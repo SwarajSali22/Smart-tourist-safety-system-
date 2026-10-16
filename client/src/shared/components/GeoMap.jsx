@@ -31,6 +31,9 @@ function deviceIcon(kind) {
   return iconCache.get(kind);
 }
 
+// Small round handle for each vertex of the zone being drawn (draggable).
+const vertexIcon = divIcon({ className: 'draft-vertex', html: '<span></span>', iconSize: [16, 16] });
+
 // Distinct from deviceIcon() so a tourist's own live browser position never
 // looks like just another tracked wristband on the same map.
 const userIcon = divIcon({ className: 'user-marker', html: '<span></span>', iconSize: [16, 16] });
@@ -134,7 +137,8 @@ function InvalidateOn({ dep }) {
  * Shared Leaflet map.
  *  - `zones` → coloured polygons, `devices` → risk/SOS-coloured markers
  *    (`riskByTourist` maps touristId → latest RiskAssessment).
- *  - `onMapClick` + `draftPoints` → click-to-place polygon drawing.
+ *  - `onMapClick` + `draftPoints` → click-to-place polygon drawing; pass `onDraftChange(index, latlng)`
+ *    to make every placed vertex draggable so the shape can be adjusted afterwards.
  *  - `trails` → [{ id, points: [[lat,lng]…] }] polylines; `replayPoint` → moving dot.
  *  - `heatPoints` → [{ lat, lng, weight }] incident density overlay.
  *  - `flyTo` → { lat, lng, key } smooth recenter; `selectedDeviceId` highlights one device.
@@ -156,6 +160,7 @@ function GeoMap({
   flyTo,
   onMapClick,
   draftPoints,
+  onDraftChange,
   focusPosition,
   userPosition,
   allowFullscreen = false,
@@ -224,6 +229,16 @@ function GeoMap({
             pathOptions={{ color: '#1d6fcc', dashArray: '6 6', fillOpacity: 0.1 }}
           />
         )}
+
+        {onDraftChange && draftPoints?.map((p, i) => (
+          <Marker
+            key={`v${i}`}
+            position={[p.lat, p.lng]}
+            icon={vertexIcon}
+            draggable
+            eventHandlers={{ drag: (e) => onDraftChange(i, e.target.getLatLng()) }}
+          />
+        ))}
 
         {trails.map((t) => (
           <Polyline key={t.id} positions={t.points} pathOptions={{ color: '#4f46e5', weight: 3, opacity: 0.75 }} />

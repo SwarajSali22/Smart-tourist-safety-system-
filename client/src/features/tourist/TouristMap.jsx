@@ -4,6 +4,7 @@ import { connectSocket } from '../../shared/socket/socket.js';
 import { useZoneSync } from '../../shared/socket/useZoneSync.js';
 import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
 import { useLiveLocation } from '../../shared/hooks/useLiveLocation.js';
+import { useI18n } from '../../shared/i18n/I18nContext.jsx';
 import Card from '../../shared/components/ui/Card.jsx';
 import Spinner from '../../shared/components/ui/Spinner.jsx';
 import GeoMap from '../../shared/components/GeoMap.jsx';
@@ -11,13 +12,14 @@ import GeoMap from '../../shared/components/GeoMap.jsx';
 const GEO_FALLBACK_STATUSES = new Set(['denied', 'unavailable', 'timeout', 'unsupported', 'error']);
 
 function TouristMap() {
+  const { t } = useI18n();
   const [deviceId, setDeviceId] = useState(undefined); // undefined = loading, null = none
   const [device, setDevice]     = useState(null);
   const [zones, setZones]       = useState([]);
-  const [error, setError]       = useState('');
   const [trail, setTrail]       = useState([]);
+  const [error, setError]       = useState('');
 
-  const { position: livePosition, status: geoStatus, error: geoError } = useLiveLocation();
+  const { position: livePosition, status: geoStatus } = useLiveLocation();
 
   useEffect(() => {
     api.get('/tourists/me')
@@ -67,26 +69,21 @@ function TouristMap() {
 
   return (
     <div className="app-page">
-      <h1 className="page-title">Live map</h1>
+      <h1 className="page-title">{t('map.title')}</h1>
 
       {error && <p className="form-error">{error}</p>}
 
       {GEO_FALLBACK_STATUSES.has(geoStatus) && (
         <div className="callout callout--warning mt-4">
           <p>
-            {geoError}
-            {deviceLocation
-              ? ' Showing your tracking device’s last reported position instead.'
-              : ' Showing a default map view until location is available.'}
+            {t(`geo.${geoStatus}`)}{' '}
+            {deviceLocation ? t('map.fallback.device') : t('map.fallback.default')}
           </p>
         </div>
       )}
 
       {deviceId === null && (
-        <p className="placeholder-text mt-4">
-          No tracking device linked to your account yet — ask an admin to register one for you.
-          Your live browser location is shown below in the meantime.
-        </p>
+        <p className="placeholder-text mt-4">{t('map.noDevice')}</p>
       )}
 
       <Card className="mt-4">

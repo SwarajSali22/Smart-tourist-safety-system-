@@ -12,6 +12,7 @@ import ConfirmDialog from '../../shared/components/ui/ConfirmDialog.jsx';
 import { SkeletonRows } from '../../shared/components/ui/Skeleton.jsx';
 import GeoMap from '../../shared/components/GeoMap.jsx';
 import { formatDateTime, label } from '../../shared/utils/format.js';
+import { formatArea, polygonAreaM2 } from '../../shared/utils/geo.js';
 
 const ZONE_BADGE = { safe: 'success', danger: 'danger', restricted: 'warning' };
 const ZONE_HELP = {
@@ -61,6 +62,10 @@ function Zones() {
 
   function handleMapClick(latlng) {
     setDraftPoints((pts) => [...pts, latlng]);
+  }
+
+  function moveDraftPoint(index, latlng) {
+    setDraftPoints((pts) => pts.map((p, i) => (i === index ? { lat: latlng.lat, lng: latlng.lng } : p)));
   }
 
   function clearDraft() {
@@ -199,12 +204,14 @@ function Zones() {
 
       {error && <p className="form-error">{error}</p>}
 
-      <Card>
-        <GeoMap zones={zones} onMapClick={handleMapClick} draftPoints={draftPoints} height={420} allowFullscreen />
+      <Card id="zone-map">
+        <GeoMap zones={zones} onMapClick={handleMapClick} draftPoints={draftPoints} onDraftChange={moveDraftPoint} height={420} allowFullscreen />
         <p className="zone-draw-hint" aria-live="polite">
           {draftPoints.length === 0
             ? 'Click on the map to start drawing a zone.'
-            : `${draftPoints.length} point${draftPoints.length === 1 ? '' : 's'} placed${draftPoints.length < 3 ? ' — place at least 3' : ''}.`}
+            : draftPoints.length < 3
+              ? `${draftPoints.length} point${draftPoints.length === 1 ? '' : 's'} placed — place at least 3.`
+              : <><strong>{draftPoints.length} vertices</strong> · area ≈ <strong>{formatArea(polygonAreaM2(draftPoints))}</strong>. Drag any point to adjust the shape.</>}
         </p>
 
         <form onSubmit={handleSaveZone} className="auth-form mt-4">
@@ -244,6 +251,7 @@ function Zones() {
           searchLabel="Search zones"
           emptyIcon={Shapes}
           emptyTitle="No zones yet"
+          emptyAction={<a className="btn btn--primary btn--sm" href="#zone-map">Draw your first zone</a>}
           emptyText="Draw a polygon on the map above to create your first geofence."
           pageSize={8}
           caption="Geofence zones"

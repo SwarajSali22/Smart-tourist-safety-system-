@@ -6,25 +6,28 @@ import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
 import { useToast } from '../../shared/components/ui/Toast.jsx';
 import Card from '../../shared/components/ui/Card.jsx';
 import Badge from '../../shared/components/ui/Badge.jsx';
-import { formatDateTime, label } from '../../shared/utils/format.js';
+import { useI18n } from '../../shared/i18n/I18nContext.jsx';
+import { vibrate } from '../../shared/utils/haptics.js';
+import { formatDateTime } from '../../shared/utils/format.js';
 
 const SOS_BADGE = { active: 'danger', acknowledged: 'warning', resolved: 'success', false_alarm: 'neutral' };
 const ARM_WINDOW_MS = 5000;
 
-function Step({ done, current, title, time }) {
+function Step({ done, current, title, time, t }) {
   return (
     <li className={`stepper__item${done ? ' stepper__item--done' : ''}${current ? ' stepper__item--current' : ''}`} aria-current={current ? 'step' : undefined}>
       <span className="stepper__dot" aria-hidden="true">{done ? <Check size={14} /> : <Circle size={10} />}</span>
       <span>
         <strong>{title}</strong>
-        <small className="form-hint block">{time ? formatDateTime(time) : done ? '' : 'Waiting…'}</small>
+        <small className="form-hint block">{time ? formatDateTime(time) : done ? '' : t('sos.step.waiting')}</small>
       </span>
-      <span className="sr-only">{done ? ' — done' : current ? ' — in progress' : ' — pending'}</span>
+      <span className="sr-only">{done ? t('sos.step.done') : current ? t('sos.step.current') : t('sos.step.pending')}</span>
     </li>
   );
 }
 
 function TouristSOS() {
+  const { t, label } = useI18n();
   const toast = useToast();
   const [sosEvent, setSosEvent] = useState(undefined); // undefined = loading
   const [armed, setArmed] = useState(false);
@@ -63,17 +66,19 @@ function TouristSOS() {
   async function handleSosClick() {
     if (!armed) {
       setArmed(true);
+      vibrate(80); // short tick: armed
       return;
     }
     setArmed(false);
     setError('');
     setTriggering(true);
+    vibrate([250, 100, 250]); // longer pattern: sending
     try {
       const data = await api.post('/sos', {});
       setSosEvent(data.sosEvent);
-      toast.success('SOS sent. An admin has been alerted.', { title: 'Help requested' });
+      toast.success(t('sos.toast.body'), { title: t('sos.toast.title') });
     } catch (err) {
-      setError(err.message || 'Failed to trigger SOS');
+      setError(err.message || t('sos.error'));
     } finally {
       setTriggering(false);
     }
@@ -84,7 +89,7 @@ function TouristSOS() {
 
   return (
     <div className="app-page">
-      <h1 className="page-title">Emergency SOS</h1>
+      <h1 className="page-title">{t('sos.title')}</h1>
 
       <Card>
         {error && <p className="form-error" role="alert">{error}</p>}
@@ -92,43 +97,48 @@ function TouristSOS() {
         {isOpen ? (
           <>
             <div className="status-row" style={{ marginBottom: '12px' }}>
-              <span>Status</span>
+              <span>{t('sos.status')}</span>
               <Badge variant={SOS_BADGE[sosEvent.status]}>{label(sosEvent.status)}</Badge>
             </div>
-            <p className="sos-hint" role="status" aria-live="polite">
-              {sosEvent.status === 'active'
-                ? 'Help has been alerted. An admin will acknowledge shortly — stay where you are if it is safe.'
-                : 'An admin has acknowledged your SOS and is responding.'}
+            <p className="sos-hint sos-center" role="status" aria-live="polite">
+              {sosEvent.status === 'active' ? t('sos.msg.active') : t('sos.msg.acknowledged')}
             </p>
-            <button className="btn btn--danger btn--full btn--sos" disabled>SOS already active</button>
+            <div className="sos-stage">
+              <button className="sos-big sos-big--done" disabled>
+                <span className="sos-big__label sos-big__label--sm">{t('sos.already')}</span>
+              </button>
+            </div>
           </>
         ) : (
-          <>
-            <p className="sos-hint" aria-live="polite">
-              {armed ? 'Tap again to confirm — this alerts an admin immediately.' : 'Press in an emergency. You will be asked to confirm.'}
+          <div className="sos-stage">
+            <p className="sos-hint sos-center" aria-live="polite">
+              {armed ? t('sos.hintArmed') : t('sos.hint')}
             </p>
             <button
-              className={`btn btn--danger btn--full btn--sos${armed ? ' btn--armed' : ''}`}
+              className={`sos-big${armed ? ' sos-big--armed' : ''}`}
               onClick={handleSosClick}
               disabled={triggering || sosEvent === undefined}
+              aria-label={armed ? t('sos.buttonArmed') : t('sos.button')}
             >
-              {triggering ? 'Sending…' : armed ? 'Tap again to confirm SOS' : 'Trigger SOS'}
+              <span className={`sos-big__label${armed || triggering ? ' sos-big__label--sm' : ''}`}>
+                {triggering ? t('sos.sending') : armed ? t('sos.buttonArmed') : t('sos.button')}
+              </span>
             </button>
             {armed && (
-              <button className="btn btn--ghost btn--full mt-4" onClick={() => setArmed(false)}>Cancel</button>
+              <button className="btn btn--ghost sos-cancel" onClick={() => setArmed(false)}>{t('sos.cancel')}</button>
             )}
-          </>
+          </div>
         )}
       </Card>
 
       {sosEvent && (
-        <Card title={isOpen ? 'Progress' : 'Your last SOS'} className="mt-4">
+        <Card title={isOpen ? t('sos.progress') : t('sos.last')} className="mt-4">
           <ol className="stepper">
-            <Step done title="SOS sent" time={sosEvent.createdAt} />
-            <Step done={acked} current={!acked && !resolved} title="Acknowledged by an admin" time={sosEvent.acknowledgedAt} />
-            <Step done={resolved} current={acked && !resolved} title="Resolved" time={sosEvent.resolvedAt} />
+            <Step t={t} done title={t('sos.step.sent')} time={sosEvent.createdAt} />
+            <Step t={t} done={acked} current={!acked && !resolved} title={t('sos.step.ack')} time={sosEvent.acknowledgedAt} />
+            <Step t={t} done={resolved} current={acked && !resolved} title={t('sos.step.resolved')} time={sosEvent.resolvedAt} />
           </ol>
-          {sosEvent.resolutionNote && <p className="form-hint mt-4">Note from admin: {sosEvent.resolutionNote}</p>}
+          {sosEvent.resolutionNote && <p className="form-hint mt-4">{t('sos.note', { note: sosEvent.resolutionNote })}</p>}
         </Card>
       )}
     </div>

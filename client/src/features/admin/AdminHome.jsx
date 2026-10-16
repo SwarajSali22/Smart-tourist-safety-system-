@@ -13,6 +13,7 @@ import Badge from '../../shared/components/ui/Badge.jsx';
 import EmptyState from '../../shared/components/ui/EmptyState.jsx';
 import GeoMap from '../../shared/components/GeoMap.jsx';
 import RiskBoard from '../../shared/components/RiskBoard.jsx';
+import AttentionPanel from './AttentionPanel.jsx';
 import { BarChart } from '../../shared/components/Charts.jsx';
 import { label, timeAgo } from '../../shared/utils/format.js';
 
@@ -105,6 +106,8 @@ function AdminHome() {
         Live overview · updated {timeAgo(lastUpdate, now)}
       </p>
 
+      <AttentionPanel sosEvents={sosEvents} incidents={incidents} now={now} />
+
       <div className="stats-grid">
         {STATS.map((s) => (
           <Card key={s.label} className="stat-card">
@@ -129,7 +132,9 @@ function AdminHome() {
 
         <Card title="Recent SOS alerts">
           {recentAlerts.length === 0 ? (
-            <EmptyState icon={BellRing} title="No SOS alerts">Alerts appear here instantly when a tourist presses SOS.</EmptyState>
+            <EmptyState icon={BellRing} title="No SOS alerts yet" action={<Link className="btn btn--ghost btn--sm" to="/admin/zones">Review safety zones</Link>}>
+              Alerts appear here instantly when a tourist presses SOS.
+            </EmptyState>
           ) : (
             <ul className="plain-list">
               {recentAlerts.map((e) => (

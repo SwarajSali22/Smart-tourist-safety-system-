@@ -5,7 +5,7 @@ function EmptyState({ icon: Icon, title, children, action }) {
       {Icon && <Icon size={28} aria-hidden="true" className="empty-state__icon" />}
       <p className="empty-state__title">{title}</p>
       {children && <p className="empty-state__text">{children}</p>}
-      {action}
+      {action && <div className="empty-state__action">{action}</div>}
     </div>
   );
 }

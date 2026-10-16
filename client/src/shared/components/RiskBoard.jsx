@@ -13,7 +13,7 @@ function RiskBoard({ assessments, loading, error, limit = 6 }) {
   if (error) return <p className="form-error">{error}</p>;
   if (assessments.length === 0) {
     return (
-      <EmptyState icon={ShieldCheck} title="No risk scores yet">
+      <EmptyState icon={ShieldCheck} title="No risk scores yet" action={<Link className="btn btn--ghost btn--sm" to="/admin/devices">Register a device</Link>}>
         Scores appear once a tourist’s device starts reporting.
       </EmptyState>
     );

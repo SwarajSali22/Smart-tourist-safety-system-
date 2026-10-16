@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Link2, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
@@ -138,6 +139,7 @@ function Blockchain() {
             searchLabel="Search proofs"
             emptyIcon={Link2}
             emptyTitle="No proofs yet"
+            emptyAction={<Link className="btn btn--ghost btn--sm" to="/admin/incidents">View incidents</Link>}
             emptyText="Proofs are created automatically when an SOS, zone violation, risk escalation or incident occurs."
             onRowClick={(p) => setExpandedId(expandedId === p._id ? null : p._id)}
             expandedId={expandedId}

@@ -39,7 +39,7 @@ async function listTourists(req, res, next) {
 async function getMyProfile(req, res, next) {
   try {
     let profile = await TouristProfile.findOne({ user: req.user.id })
-      .populate('device', 'deviceId status isSimulated lastSeen')
+      .populate('device', 'deviceId status isSimulated lastSeen type')
       .lean();
 
     if (!profile) {

@@ -5,25 +5,22 @@ import { api, tokens } from '../../api/client.js';
 import { connectSocket } from '../../shared/socket/socket.js';
 import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
 import { useNow } from '../../shared/hooks/useNow.js';
+import { useI18n } from '../../shared/i18n/I18nContext.jsx';
 import Card from '../../shared/components/ui/Card.jsx';
 import Badge from '../../shared/components/ui/Badge.jsx';
 import { SkeletonRows } from '../../shared/components/ui/Skeleton.jsx';
 import LocationShareCard from '../../shared/location/LocationShareCard.jsx';
-import { FACTOR_LABELS, label, RISK_VARIANT, timeAgo } from '../../shared/utils/format.js';
+import { label as englishLabel, RISK_VARIANT } from '../../shared/utils/format.js';
 
 const SOS_BADGE = { active: 'danger', acknowledged: 'warning', resolved: 'success', false_alarm: 'neutral' };
 const CHECK_BADGE = { safe: 'success', unsafe: 'danger', no_response: 'neutral' };
 const DEVICE_BADGE = { active: 'success', inactive: 'neutral', lost: 'warning', emergency: 'danger' };
 
-const RISK_MESSAGE = {
-  low: 'Everything looks normal. Enjoy your trip.',
-  medium: 'Some caution advised. Stay on well-used routes.',
-  high: 'Elevated risk. Stay alert and consider moving to a safer area.',
-  critical: 'Critical risk. If you need help, press SOS now.',
-};
+const mmss = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}`;
 
 function TouristHome() {
   const { user } = useAuth();
+  const { t, label, tOr, timeAgo } = useI18n();
   const now = useNow(1000);
   const [sosEvent, setSosEvent] = useState(undefined); // undefined = loading
   const [check, setCheck] = useState(undefined);
@@ -72,95 +69,94 @@ function TouristHome() {
   let checkLine = null;
   if (isCheckPending && checkConfig) {
     const left = new Date(check.scheduledAt).getTime() + checkConfig.responseWindowMinutes * 60000 - now;
-    checkLine = left > 0
-      ? `Please answer within ${Math.floor(left / 60000)}:${String(Math.floor((left % 60000) / 1000)).padStart(2, '0')}`
-      : 'Response window has passed — answer now to avoid an alert.';
+    checkLine = left > 0 ? t('home.check.deadline', { time: mmss(left) }) : t('home.check.late');
   } else if (check && checkConfig) {
     const next = new Date(check.scheduledAt).getTime() + checkConfig.intervalMinutes * 60000;
-    checkLine = `Next check-in around ${new Date(next).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (while your device is active)`;
+    checkLine = t('home.check.next', { time: new Date(next).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
   }
 
   const factors = risk?.factors
     ? Object.entries(risk.factors).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 3)
     : [];
+  const factorNames = factors.map(([k]) => tOr(`factor.${k}`, k)).join(', ');
+  const ruleName = risk?.ruleName ? tOr(`rule.${risk.ruleName}`, englishLabel(risk.ruleName)) : '';
+  const sourceName = device?.type === 'phone' ? t('home.device.phone') : t('home.device.wristband');
 
   return (
     <div className="app-page">
-      <h1 className="page-title">Hello, {user?.name}</h1>
+      <h1 className="page-title">{t('home.title', { name: user?.name })}</h1>
 
       {isOpen && (
         <div className="callout callout--danger" role="status">
-          <strong>Your SOS is {label(sosEvent.status).toLowerCase()}.</strong>{' '}
-          {sosEvent.status === 'active' ? 'Help has been alerted.' : 'An admin is responding.'}{' '}
-          <Link to="/tourist/sos">View status</Link>
+          <strong>{t('shell.sos.active')}</strong>{' '}
+          {sosEvent.status === 'active' ? t('shell.sos.alerted') : t('shell.sos.responding')}{' '}
+          <Link to="/tourist/sos">{t('shell.sos.view')}</Link>
         </div>
       )}
 
       <div className="tourist-status-grid">
-        <Card title="Safety status">
+        <Card title={t('home.safety.title')}>
           {risk === undefined ? (
             <SkeletonRows rows={2} />
           ) : risk === null ? (
             <>
-              <div className="status-row"><span>Current risk level</span><Badge variant="neutral">Not assessed yet</Badge></div>
-              <p className="placeholder-text mt-4">Your risk level appears once your device starts reporting its location.</p>
+              <div className="status-row"><span>{t('home.safety.current')}</span><Badge variant="neutral">{t('home.safety.notAssessed')}</Badge></div>
+              <p className="placeholder-text mt-4">{t('home.safety.pending')}</p>
             </>
           ) : (
             <>
               <div className="status-row">
-                <span>Current risk level</span>
+                <span>{t('home.safety.current')}</span>
                 <Badge variant={RISK_VARIANT[risk.level]}>{risk.ruleTriggered ? label(risk.level) : `${label(risk.level)} · ${risk.score}/100`}</Badge>
               </div>
-              <div className={`meter meter--${risk.level} mt-4`} role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={risk.ruleTriggered ? 100 : risk.score} aria-label={risk.ruleTriggered ? 'Risk raised automatically' : `Risk score ${risk.score} of 100`}>
+              <div className={`meter meter--${risk.level} mt-4`} role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={risk.ruleTriggered ? 100 : risk.score} aria-label={`${t('home.safety.current')}: ${label(risk.level)}`}>
                 <span style={{ width: `${risk.ruleTriggered ? 100 : risk.score}%` }} />
               </div>
-              <p className="placeholder-text mt-4">{RISK_MESSAGE[risk.level]}</p>
+              <p className="placeholder-text mt-4">{t(`home.risk.${risk.level}`)}</p>
               {risk.ruleTriggered && (
-                <p className="form-hint mt-4">Raised automatically: {label(risk.ruleName)}. Updated {timeAgo(risk.evaluatedAt, now)}.</p>
+                <p className="form-hint mt-4">{t('home.risk.auto', { rule: ruleName, when: timeAgo(risk.evaluatedAt, now) })}</p>
               )}
               {!risk.ruleTriggered && factors.length > 0 && (
-                <p className="form-hint mt-4">
-                  Main factors: {factors.map(([k]) => FACTOR_LABELS[k] || k).join(', ')}. Updated {timeAgo(risk.evaluatedAt, now)}.
-                </p>
+                <p className="form-hint mt-4">{t('home.risk.factors', { factors: factorNames, when: timeAgo(risk.evaluatedAt, now) })}</p>
               )}
             </>
           )}
         </Card>
 
-        <Card title="Device">
+        <Card title={t('home.device.title')}>
           <div className="status-row">
-            <span>Wristband</span>
-            {device === undefined ? <Badge variant="neutral">Loading…</Badge> : device ? (
+            <span>{device ? sourceName : t('home.device.wristband')}</span>
+            {device === undefined ? <Badge variant="neutral">{t('common.loading')}</Badge> : device ? (
               <Badge variant={DEVICE_BADGE[device.status] || 'neutral'}>{label(device.status)}</Badge>
             ) : (
-              <Badge variant="neutral">Not linked</Badge>
+              <Badge variant="neutral">{t('home.device.notLinked')}</Badge>
             )}
           </div>
           <p className="placeholder-text mt-4">
             {device
-              ? `${device.deviceId} — last seen ${device.lastSeen ? timeAgo(device.lastSeen, now) : 'never'}`
-              : device === null ? 'Ask an admin to register a tracking device for you.' : ''}
+              ? t('home.device.lastSeen', { id: device.deviceId, when: device.lastSeen ? timeAgo(device.lastSeen, now) : t('time.never') })
+              : device === null ? t('home.device.ask') : ''}
           </p>
         </Card>
 
-        <Card title="Next safety check">
+        <Card title={t('home.check.title')}>
           {check === undefined ? (
             <SkeletonRows rows={2} />
           ) : isCheckPending ? (
             <>
-              <p className="sos-hint"><strong>A check-in is waiting for your response.</strong></p>
+              <p className="sos-hint"><strong>{t('home.check.waiting')}</strong></p>
               <p className="form-hint" aria-live="off">{checkLine}</p>
             </>
           ) : check ? (
             <>
-              <div className="status-row"><span>Last check-in</span><Badge variant={CHECK_BADGE[check.response]}>{label(check.response)}</Badge></div>
+              <div className="status-row"><span>{t('home.check.last')}</span><Badge variant={CHECK_BADGE[check.response]}>{label(check.response)}</Badge></div>
               {checkLine && <p className="form-hint mt-4">{checkLine}</p>}
             </>
           ) : (
-            <p className="placeholder-text">No check-ins yet — the first one is sent once your device is active.</p>
+            <p className="placeholder-text">{t('home.check.none')}</p>
           )}
           <Link className={`btn ${isCheckPending ? 'btn--primary' : 'btn--ghost'} btn--sm mt-4`} to="/tourist/checks">
-            {isCheckPending ? 'Answer now' : 'Open check-ins'}
+            {isCheckPending ? t('home.check.answer') : t('home.check.open')}
           </Link>
         </Card>
       </div>
@@ -168,22 +164,22 @@ function TouristHome() {
       <div className="tourist-sections">
         <LocationShareCard />
 
-        <Card title="Live map">
-          <p className="placeholder-text">See your location and nearby safe, restricted and danger zones.</p>
-          <Link className="btn btn--ghost btn--sm mt-4" to="/tourist/map">Open map</Link>
+        <Card title={t('home.map.title')}>
+          <p className="placeholder-text">{t('home.map.text')}</p>
+          <Link className="btn btn--ghost btn--sm mt-4" to="/tourist/map">{t('home.map.open')}</Link>
         </Card>
 
-        <Card title="SOS">
+        <Card title={t('home.sos.title')}>
           {isOpen ? (
             <div className="status-row" style={{ marginBottom: '12px' }}>
-              <span>Your SOS is</span>
+              <span>{t('home.sos.yours')}</span>
               <Badge variant={SOS_BADGE[sosEvent.status]}>{label(sosEvent.status)}</Badge>
             </div>
           ) : (
-            <p className="sos-hint">Press in an emergency to alert an admin and your emergency contacts immediately.</p>
+            <p className="sos-hint">{t('home.sos.hint')}</p>
           )}
           <Link className={`btn ${isOpen ? 'btn--ghost' : 'btn--danger'} btn--full`} to="/tourist/sos">
-            {isOpen ? 'View SOS status' : 'Open SOS'}
+            {isOpen ? t('home.sos.viewStatus') : t('home.sos.open')}
           </Link>
         </Card>
       </div>

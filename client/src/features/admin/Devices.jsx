@@ -121,7 +121,7 @@ function Devices() {
       <h1 className="page-title">Devices</h1>
       <p className="page-subtitle">Registered tracking devices (simulated until the ESP32 wristband is ready)</p>
 
-      <Card title="Register a device" className="mt-4">
+      <Card id="register-device" title="Register a device" className="mt-4">
         {issuedKey && (
           <div className="callout callout--warning" role="status">
             <p>
@@ -167,6 +167,7 @@ function Devices() {
             searchLabel="Search devices"
             emptyIcon={Watch}
             emptyTitle="No devices registered yet"
+            emptyAction={<a className="btn btn--primary btn--sm" href="#register-device">Register a device</a>}
             emptyText="Phones appear automatically when a tourist shares their location. For a wristband, register one above and run scripts/simulateGps.js with the issued key."
             caption="Registered devices"
           />

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { ShieldCheck, Siren } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { MapPin, ShieldCheck, Siren } from 'lucide-react';
 import { api, tokens } from '../../api/client.js';
 import { connectSocket } from '../../shared/socket/socket.js';
 import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
@@ -17,6 +18,7 @@ const STATUS_BADGE = { open: 'danger', in_progress: 'warning', resolved: 'succes
 
 function Incidents() {
   const toast = useToast();
+  const navigate = useNavigate();
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -146,17 +148,23 @@ function Incidents() {
     { key: 'createdAt', header: 'Created', sortValue: (i) => new Date(i.createdAt).getTime(), render: (i) => formatDateTime(i.createdAt) },
     {
       key: 'actions', header: <span className="sr-only">Actions</span>,
-      render: (i) =>
-        (i.status === 'open' || i.status === 'in_progress') && (
+      render: (i) => (
           <div className="contact-actions" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+            {i.tourist?._id && (
+              <button className="btn btn--ghost btn--sm" onClick={() => navigate(`/admin/map?tourist=${i.tourist._id}`)} aria-label={`Show ${i.tourist.name || 'tourist'} on the map`}>
+                <MapPin size={14} aria-hidden="true" /> Map
+              </button>
+            )}
             {i.status === 'open' && (
               <button className="btn btn--ghost btn--sm" disabled={busyId === i._id} onClick={() => handleAcknowledge(i)}>
                 Acknowledge
               </button>
             )}
-            <button className="btn btn--primary btn--sm" disabled={busyId === i._id} onClick={() => { setResolving(i); setNote(''); }}>
-              Resolve
-            </button>
+            {(i.status === 'open' || i.status === 'in_progress') && (
+              <button className="btn btn--primary btn--sm" disabled={busyId === i._id} onClick={() => { setResolving(i); setNote(''); }}>
+                Resolve
+              </button>
+            )}
           </div>
         ),
     },
@@ -253,6 +261,7 @@ function Incidents() {
             emptyIcon={Siren}
             emptyTitle="No incidents yet"
             emptyText="SOS presses, missed check-ins and risk escalations will be tracked here."
+            emptyAction={<Link className="btn btn--ghost btn--sm" to="/admin/map">Open the live map</Link>}
             onRowClick={toggleExpand}
             expandedId={expandedId}
             renderExpanded={renderExpanded}

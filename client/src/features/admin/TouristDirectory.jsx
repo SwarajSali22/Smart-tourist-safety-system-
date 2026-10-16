@@ -72,7 +72,8 @@ function TouristDirectory() {
             searchLabel="Search tourists"
             emptyIcon={Users}
             emptyTitle="No tourists registered yet"
-            emptyText="Tourists appear here after they register from the public sign-up page."
+            emptyText="Tourists appear here after they register from the public sign-up page. Once they do, assign each one a device."
+            emptyAction={<Link className="btn btn--primary btn--sm" to="/admin/devices">Go to Devices</Link>}
             caption="Registered tourists"
           />
         )}

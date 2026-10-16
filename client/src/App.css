@@ -701,3 +701,42 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .public-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: var(--space-4) var(--space-2); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
 .public-stat__value { font-size: clamp(1.5rem, 4vw, 2.2rem); font-weight: 800; letter-spacing: -.02em; color: var(--color-primary); font-variant-numeric: tabular-nums; }
 .public-stat__label { font-size: 12.5px; color: var(--color-text-muted); text-align: center; }
+
+/* ── Zone drawing: draggable vertex handles ──────────────────────────────────── */
+.draft-vertex span { display: block; width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 3px solid #1d6fcc; box-shadow: 0 1px 4px rgba(0,0,0,.4); cursor: grab; }
+.draft-vertex:hover span, .draft-vertex.leaflet-drag-target span { background: #1d6fcc; }
+
+/* ── Needs-attention panel (admin dashboard) ─────────────────────────────────── */
+.attention { margin-bottom: var(--space-6); padding: var(--space-4) var(--space-5); background: var(--color-danger-soft); border: 1px solid var(--color-danger-border); border-left: 5px solid var(--color-danger); border-radius: var(--radius-lg); }
+.attention--clear { display: flex; align-items: center; gap: 10px; background: var(--color-success-soft); border-color: var(--color-success-border); border-left-color: var(--color-success); color: var(--color-success-dk); padding: var(--space-3) var(--space-5); font-size: 14px; }
+.attention__title { display: flex; align-items: center; gap: 8px; margin: 0 0 var(--space-3); font-size: 1rem; color: var(--color-danger-dk); }
+.attention__count { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 99px; background: var(--color-danger); color: #fff; font-size: 12px; }
+.attention__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.attention__item { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); flex-wrap: wrap; }
+.attention__icon { display: inline-flex; width: 34px; height: 34px; align-items: center; justify-content: center; border-radius: 50%; background: var(--color-warning-soft); color: var(--color-warning); flex-shrink: 0; }
+.attention__icon--sos { background: var(--color-danger); color: #fff; }
+.attention__main { flex: 1; min-width: 160px; display: flex; flex-direction: column; color: var(--color-text); }
+.attention__main small { color: var(--color-text-muted); }
+.attention__actions { display: inline-flex; gap: var(--space-2); }
+.empty-state__action { margin-top: var(--space-3); }
+
+/* ── Language switcher ───────────────────────────────────────────────────────── */
+.lang-switch select { padding: 6px 8px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); font-family: inherit; font-size: 13px; cursor: pointer; }
+
+/* ── Big SOS button (tourist) ────────────────────────────────────────────────── */
+.sos-stage { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); padding: var(--space-4) 0 var(--space-2); }
+.sos-center { text-align: center; max-width: 420px; margin-left: auto; margin-right: auto; }
+.sos-big {
+  width: min(72vw, 260px); aspect-ratio: 1; border-radius: 50%; border: 8px solid color-mix(in srgb, var(--color-danger) 25%, transparent);
+  background: radial-gradient(circle at 35% 30%, #ef4444, var(--color-danger-dk) 75%);
+  color: #fff; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; justify-content: center; text-align: center;
+  box-shadow: 0 10px 30px rgba(220,38,38,.4); transition: transform .1s, box-shadow .15s;
+}
+.sos-big:active:not(:disabled) { transform: scale(.97); }
+.sos-big:disabled { cursor: not-allowed; }
+.sos-big--done { background: var(--color-neutral); border-color: var(--color-neutral-soft); box-shadow: none; opacity: .85; }
+.sos-big--armed { animation: sos-armed 1s ease-in-out infinite; }
+.sos-big__label { font-size: clamp(2.4rem, 12vw, 3.4rem); font-weight: 800; letter-spacing: .04em; line-height: 1.1; padding: 0 12px; }
+.sos-big__label--sm { font-size: 1.15rem; letter-spacing: 0; }
+.sos-cancel { min-width: 160px; }
+@keyframes sos-armed { 0%,100% { box-shadow: 0 10px 30px rgba(220,38,38,.4), 0 0 0 0 rgba(220,38,38,.55); } 50% { box-shadow: 0 10px 30px rgba(220,38,38,.4), 0 0 0 22px rgba(220,38,38,0); } }
