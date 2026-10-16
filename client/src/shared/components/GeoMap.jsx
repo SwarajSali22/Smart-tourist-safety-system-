@@ -1,0 +1,264 @@
+import { useEffect, useRef, useState } from 'react';
+import { MapContainer, TileLayer, Polygon, Polyline, Marker, CircleMarker, Popup, useMap, useMapEvents } from 'react-leaflet';
+import { divIcon } from 'leaflet';
+import { Maximize2, Minimize2 } from 'lucide-react';
+import 'leaflet/dist/leaflet.css';
+import { label, timeAgo } from '../utils/format.js';
+
+const ZONE_COLOR = {
+  safe: '#2e7d5b',
+  danger: '#c0392b',
+  restricted: '#b45309',
+};
+
+const LEGEND = [
+  ['low', 'Low risk'],
+  ['medium', 'Medium'],
+  ['high', 'High'],
+  ['critical', 'Critical'],
+  ['sos', 'SOS / emergency'],
+  ['idle', 'Offline / no risk data'],
+];
+
+// Leaflet's default marker PNGs don't resolve correctly through Vite's
+// bundler — plain coloured dots avoid that class of broken-asset bug. Icons
+// are cached per class so re-renders don't recreate (and flicker) markers.
+const iconCache = new Map();
+function deviceIcon(kind) {
+  if (!iconCache.has(kind)) {
+    iconCache.set(kind, divIcon({ className: `device-marker device-marker--${kind}`, html: '<span></span>', iconSize: [18, 18] }));
+  }
+  return iconCache.get(kind);
+}
+
+// Distinct from deviceIcon() so a tourist's own live browser position never
+// looks like just another tracked wristband on the same map.
+const userIcon = divIcon({ className: 'user-marker', html: '<span></span>', iconSize: [16, 16] });
+
+function markerKind(device, risk) {
+  if (device.emergencyMode || device.status === 'emergency') return 'sos';
+  if (device.status === 'inactive' || device.status === 'lost') return 'idle';
+  return risk?.level || 'idle';
+}
+
+function ClickCapture({ onMapClick }) {
+  useMapEvents({
+    click(e) {
+      onMapClick?.(e.latlng);
+    },
+  });
+  return null;
+}
+
+// MapContainer's `center` prop only applies on first mount. This recenters
+// exactly once, the first time a real position arrives, then leaves the map
+// alone so it doesn't fight a viewer's manual pan/zoom.
+function RecenterOnce({ position, zoom }) {
+  const map = useMap();
+  const hasCentered = useRef(false);
+
+  useEffect(() => {
+    if (!position || hasCentered.current) return;
+    hasCentered.current = true;
+    map.setView(position, zoom);
+  }, [position, zoom, map]);
+
+  return null;
+}
+
+// Fly to a point whenever `target.key` changes (e.g. admin selects a tourist).
+function FlyTo({ target }) {
+  const map = useMap();
+  useEffect(() => {
+    if (target?.lat != null) map.flyTo([target.lat, target.lng], Math.max(map.getZoom(), 15), { duration: 0.8 });
+  }, [target?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+// Leaflet caches its size; tell it when the container changes (fullscreen toggle).
+function InvalidateOn({ dep }) {
+  const map = useMap();
+  useEffect(() => {
+    const id = setTimeout(() => map.invalidateSize(), 60);
+    return () => clearTimeout(id);
+  }, [dep, map]);
+  return null;
+}
+
+/**
+ * Shared Leaflet map.
+ *  - `zones` → coloured polygons, `devices` → risk/SOS-coloured markers
+ *    (`riskByTourist` maps touristId → latest RiskAssessment).
+ *  - `onMapClick` + `draftPoints` → click-to-place polygon drawing.
+ *  - `trails` → [{ id, points: [[lat,lng]…] }] polylines; `replayPoint` → moving dot.
+ *  - `heatPoints` → [{ lat, lng, weight }] incident density overlay.
+ *  - `flyTo` → { lat, lng, key } smooth recenter; `selectedDeviceId` highlights one device.
+ *  - `userPosition` → the viewer's own live location (distinct green marker).
+ *  - `allowFullscreen` adds an expand button (Esc to exit); `showLegend` adds a text legend.
+ */
+function GeoMap({
+  center = [28.6139, 77.209],
+  zoom = 13,
+  height = 360,
+  zones = [],
+  devices = [],
+  riskByTourist = {},
+  trails = [],
+  heatPoints = [],
+  replayPoint,
+  selectedDeviceId,
+  onSelectDevice,
+  flyTo,
+  onMapClick,
+  draftPoints,
+  focusPosition,
+  userPosition,
+  allowFullscreen = false,
+  showLegend = false,
+}) {
+  const [full, setFull] = useState(false);
+
+  useEffect(() => {
+    if (!full) return undefined;
+    const onKey = (e) => e.key === 'Escape' && setFull(false);
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [full]);
+
+  return (
+    <div className={`map-container${full ? ' map-container--full' : ''}`} style={full ? undefined : { height }}>
+      {allowFullscreen && (
+        <button
+          type="button"
+          className="map-fs-btn"
+          onClick={() => setFull((f) => !f)}
+          aria-label={full ? 'Exit full screen map' : 'Full screen map'}
+          title={full ? 'Exit full screen (Esc)' : 'Full screen'}
+        >
+          {full ? <Minimize2 size={16} aria-hidden="true" /> : <Maximize2 size={16} aria-hidden="true" />}
+        </button>
+      )}
+
+      <MapContainer center={center} zoom={zoom} style={{ height: '100%', width: '100%' }}>
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+
+        <InvalidateOn dep={full} />
+        {focusPosition && <RecenterOnce position={focusPosition} zoom={zoom} />}
+        {flyTo && <FlyTo target={flyTo} />}
+        {onMapClick && <ClickCapture onMapClick={onMapClick} />}
+
+        {zones.map((zone) => (
+          <Polygon
+            key={zone._id}
+            positions={zone.geometry.coordinates[0].map(([lng, lat]) => [lat, lng])}
+            pathOptions={{ color: ZONE_COLOR[zone.type] || '#64748b', fillOpacity: 0.2 }}
+          >
+            <Popup>
+              <strong>{zone.name}</strong> ({label(zone.type)})
+              {zone.description && <p>{zone.description}</p>}
+            </Popup>
+          </Polygon>
+        ))}
+
+        {heatPoints.map((p, i) => (
+          <CircleMarker
+            key={`h${i}`}
+            center={[p.lat, p.lng]}
+            radius={14 + (p.weight || 1) * 3}
+            interactive={false}
+            pathOptions={{ stroke: false, fillColor: '#dc2626', fillOpacity: 0.1 + Math.min(0.12, (p.weight || 1) * 0.03) }}
+          />
+        ))}
+
+        {draftPoints && draftPoints.length > 0 && (
+          <Polygon
+            positions={draftPoints.map(({ lat, lng }) => [lat, lng])}
+            pathOptions={{ color: '#1d6fcc', dashArray: '6 6', fillOpacity: 0.1 }}
+          />
+        )}
+
+        {trails.map((t) => (
+          <Polyline key={t.id} positions={t.points} pathOptions={{ color: '#4f46e5', weight: 3, opacity: 0.75 }} />
+        ))}
+
+        {replayPoint && (
+          <CircleMarker
+            center={[replayPoint.lat, replayPoint.lng]}
+            radius={9}
+            pathOptions={{ color: '#fff', weight: 2, fillColor: '#4f46e5', fillOpacity: 1 }}
+          />
+        )}
+
+        {userPosition && (
+          <Marker position={[userPosition.lat, userPosition.lng]} icon={userIcon}>
+            <Popup>
+              <strong>Your location</strong>
+              {typeof userPosition.accuracy === 'number' && (
+                <>
+                  <br />
+                  Accuracy: ±{Math.round(userPosition.accuracy)}m
+                </>
+              )}
+            </Popup>
+          </Marker>
+        )}
+
+        {devices
+          .filter((d) => d.lastLocation?.lat != null)
+          .map((d) => {
+            const risk = riskByTourist[d.tourist?._id || d.tourist];
+            const kind = markerKind(d, risk);
+            return (
+              <Marker
+                key={d._id}
+                position={[d.lastLocation.lat, d.lastLocation.lng]}
+                icon={deviceIcon(selectedDeviceId === d.deviceId ? `${kind} device-marker--selected` : kind)}
+                zIndexOffset={kind === 'sos' ? 1000 : selectedDeviceId === d.deviceId ? 500 : 0}
+                eventHandlers={onSelectDevice ? { click: () => onSelectDevice(d) } : undefined}
+              >
+                <Popup>
+                  <strong>{d.tourist?.name || d.deviceId}</strong>
+                  <br />
+                  Status: {label(d.status)}
+                  {risk && (
+                    <>
+                      <br />
+                      Risk: {label(risk.level)} ({risk.score})
+                    </>
+                  )}
+                  {typeof d.battery === 'number' && (
+                    <>
+                      <br />
+                      Battery: {d.battery}%
+                    </>
+                  )}
+                  {d.lastSeen && (
+                    <>
+                      <br />
+                      Last seen: {timeAgo(d.lastSeen)}
+                    </>
+                  )}
+                </Popup>
+              </Marker>
+            );
+          })}
+      </MapContainer>
+
+      {showLegend && (
+        <ul className="map-legend" aria-label="Map legend">
+          {LEGEND.map(([kind, text]) => (
+            <li key={kind}>
+              <span className={`map-legend__dot device-marker--${kind}`} aria-hidden="true" />
+              {text}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+export default GeoMap;

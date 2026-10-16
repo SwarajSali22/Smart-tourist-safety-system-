@@ -1,0 +1,25 @@
+# Dependencies & build output (also covered per-package, kept here too
+# in case a command is ever run from the repo root)
+node_modules/
+dist/
+dist-ssr/
+build/
+coverage/
+
+# Environment files — never commit real secrets
+.env
+.env.local
+*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local assistant settings
+.claude/settings.local.json
