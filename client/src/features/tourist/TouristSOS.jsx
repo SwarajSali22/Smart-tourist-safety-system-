@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Check, Circle } from 'lucide-react';
 import { api, tokens } from '../../api/client.js';
 import { connectSocket } from '../../shared/socket/socket.js';
+import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
 import { useToast } from '../../shared/components/ui/Toast.jsx';
 import Card from '../../shared/components/ui/Card.jsx';
 import Badge from '../../shared/components/ui/Badge.jsx';
@@ -46,6 +47,10 @@ function TouristSOS() {
       socket.off('sos:updated', onSos);
     };
   }, []);
+
+  useOnReconnect(() => {
+    api.get('/sos/mine').then((d) => setSosEvent(d.sosEvent)).catch(() => {});
+  });
 
   useEffect(() => {
     if (!armed) return undefined;

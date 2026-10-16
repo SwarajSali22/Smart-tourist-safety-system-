@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, tokens } from '../../api/client.js';
 import { connectSocket } from '../../shared/socket/socket.js';
 import { useZoneSync } from '../../shared/socket/useZoneSync.js';
+import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
 import { useLiveLocation } from '../../shared/hooks/useLiveLocation.js';
 import Card from '../../shared/components/ui/Card.jsx';
 import Spinner from '../../shared/components/ui/Spinner.jsx';
@@ -26,6 +27,9 @@ function TouristMap() {
   }, []);
 
   useZoneSync(setZones);
+  useOnReconnect(() => {
+    if (deviceId) api.get(`/devices/${deviceId}`).then((d) => setDevice(d.device)).catch(() => {});
+  });
 
   useEffect(() => {
     if (!deviceId) return;

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Copy, Watch } from 'lucide-react';
 import { api, tokens } from '../../api/client.js';
 import { connectSocket } from '../../shared/socket/socket.js';
+import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
 import { useNow } from '../../shared/hooks/useNow.js';
 import { useToast } from '../../shared/components/ui/Toast.jsx';
 import Card from '../../shared/components/ui/Card.jsx';
@@ -57,6 +58,11 @@ function Devices() {
   }, []);
 
   // A tourist tracked only by their phone can still be given a wristband (it replaces the phone device).
+  useOnReconnect(() => {
+    loadDevices().catch(() => {});
+    loadTourists().catch(() => {});
+  });
+
   const unassignedTourists = tourists.filter((t) => !t.device || t.deviceType === 'phone');
 
   async function handleRegister(e) {

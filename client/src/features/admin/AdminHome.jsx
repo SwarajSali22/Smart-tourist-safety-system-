@@ -5,6 +5,7 @@ import { useAuth } from '../../shared/auth/AuthContext.jsx';
 import { api, tokens } from '../../api/client.js';
 import { connectSocket } from '../../shared/socket/socket.js';
 import { useZoneSync } from '../../shared/socket/useZoneSync.js';
+import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
 import { useRiskBoard } from '../../shared/hooks/useRiskBoard.js';
 import { useNow } from '../../shared/hooks/useNow.js';
 import Card from '../../shared/components/ui/Card.jsx';
@@ -52,6 +53,14 @@ function AdminHome() {
   }, []);
 
   useZoneSync(setZones);
+
+  // After a socket reconnect, refetch what we may have missed while offline
+  // (zones refetch themselves via useZoneSync, risk via useRiskBoard).
+  useOnReconnect(() => {
+    api.get('/devices').then((d) => setDevices(d.devices || [])).catch(() => {});
+    api.get('/sos').then((d) => setSosEvents(d.events || [])).catch(() => {});
+    api.get('/incidents').then((d) => setIncidents(d.incidents || [])).catch(() => {});
+  });
 
   useEffect(() => {
     const socket = connectSocket(tokens.getAccess());

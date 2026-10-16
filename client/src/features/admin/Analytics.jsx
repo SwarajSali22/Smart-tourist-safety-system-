@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client.js';
+import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
 import { useRiskBoard } from '../../shared/hooks/useRiskBoard.js';
 import Card from '../../shared/components/ui/Card.jsx';
 import EmptyState from '../../shared/components/ui/EmptyState.jsx';
@@ -15,6 +16,10 @@ function Analytics() {
   useEffect(() => {
     api.get('/analytics/overview').then(setData).catch((e) => setError(e.message));
   }, []);
+
+  useOnReconnect(() => {
+    api.get('/analytics/overview').then(setData).catch(() => {});
+  });
 
   if (error) return <div className="app-page"><h1 className="page-title">Analytics</h1><p className="form-error" role="alert">{error}</p></div>;
   if (!data) {

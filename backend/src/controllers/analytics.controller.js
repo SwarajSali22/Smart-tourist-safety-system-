@@ -2,6 +2,16 @@ const { Incident, SOSEvent, GeofenceEvent, Zone } = require('../models');
 
 const DAYS = 14;
 
+// The day buckets below are built from the server's LOCAL calendar days, so the
+// Mongo grouping must use the same UTC offset (e.g. "+05:30"); grouping by UTC
+// would put an incident at 00:20 local on the previous day.
+function localOffset() {
+  const mins = -new Date().getTimezoneOffset();
+  const sign = mins < 0 ? '-' : '+';
+  const abs = Math.abs(mins);
+  return `${sign}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`;
+}
+
 // ── GET /api/analytics/overview  (admin) ─────────────────────────────────────
 async function overview(req, res, next) {
   try {
@@ -12,7 +22,7 @@ async function overview(req, res, next) {
     const [byDayRaw, byType, sosPoints, geoPoints, ackStats, zoneEntries] = await Promise.all([
       Incident.aggregate([
         { $match: { createdAt: { $gte: since } } },
-        { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } },
+        { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: localOffset() } }, count: { $sum: 1 } } },
       ]),
       Incident.aggregate([{ $group: { _id: '$type', count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
       SOSEvent.find().sort({ createdAt: -1 }).limit(300).select('location createdAt source').lean(),

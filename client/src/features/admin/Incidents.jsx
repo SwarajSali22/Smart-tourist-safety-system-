@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ShieldCheck, Siren } from 'lucide-react';
 import { api, tokens } from '../../api/client.js';
 import { connectSocket } from '../../shared/socket/socket.js';
+import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
 import { useToast } from '../../shared/components/ui/Toast.jsx';
 import Card from '../../shared/components/ui/Card.jsx';
 import Badge from '../../shared/components/ui/Badge.jsx';
@@ -57,28 +58,55 @@ function Incidents() {
     };
   }, []);
 
+  useOnReconnect(() => {
+    api.get('/incidents').then((d) => setIncidents(d.incidents || [])).catch(() => {});
+  });
+
+  // Optimistic update: show the new state immediately and restore the previous
+  // one if the request fails. A socket update replaces the row (dropping
+  // _pending), so a late failure never overwrites newer server state.
+  function applyOptimistic(id, patch) {
+    const prev = incidents.find((i) => i._id === id);
+    setIncidents((is) => is.map((i) => (i._id === id ? { ...i, ...patch, _pending: true } : i)));
+    return () => setIncidents((is) => is.map((i) => (i._id === id && i._pending ? prev : i)));
+  }
+
   async function handleAcknowledge(incident) {
     setBusyId(incident._id);
+    const rollback = applyOptimistic(incident._id, {
+      status: 'in_progress',
+      timeline: [...incident.timeline, { actorLabel: 'admin', action: 'Incident acknowledged', at: new Date().toISOString() }],
+    });
     try {
       await api.patch(`/incidents/${incident._id}/acknowledge`, {});
       toast.success(`Acknowledged — ${incident.tourist?.name || 'tourist'} has been told help is responding.`);
     } catch (err) {
-      toast.error(err.message || 'Failed to acknowledge incident');
+      rollback();
+      toast.error(`Couldn’t acknowledge: ${err.message || 'request failed'}. The incident was restored.`);
     } finally {
       setBusyId(null);
     }
   }
 
   async function confirmResolve() {
-    setBusyId(resolving._id);
+    const incident = resolving;
+    const resolution = note.trim();
+    setResolving(null); // close right away — the table already shows it resolved
+    setNote('');
+    setBusyId(incident._id);
+    const rollback = applyOptimistic(incident._id, {
+      status: 'resolved',
+      resolution: resolution || null,
+      resolvedAt: new Date().toISOString(),
+      timeline: [...incident.timeline, { actorLabel: 'admin', action: 'Incident resolved', at: new Date().toISOString() }],
+    });
     try {
-      await api.patch(`/incidents/${resolving._id}/resolve`, { resolution: note.trim() || undefined });
+      await api.patch(`/incidents/${incident._id}/resolve`, { resolution: resolution || undefined });
       toast.success('Incident resolved and recorded on the audit chain.');
-      setResolving(null);
-      setNote('');
-      setProofs((p) => { const next = { ...p }; delete next[resolving._id]; return next; });
+      setProofs((p) => { const next = { ...p }; delete next[incident._id]; return next; });
     } catch (err) {
-      toast.error(err.message || 'Failed to resolve incident');
+      rollback();
+      toast.error(`Couldn’t resolve: ${err.message || 'request failed'}. The incident was restored.`);
     } finally {
       setBusyId(null);
     }

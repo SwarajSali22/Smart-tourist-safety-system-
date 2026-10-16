@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, tokens } from '../../api/client.js';
 import { connectSocket } from '../../shared/socket/socket.js';
+import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
 import { useNow } from '../../shared/hooks/useNow.js';
 import { useToast } from '../../shared/components/ui/Toast.jsx';
 import Card from '../../shared/components/ui/Card.jsx';
@@ -34,6 +35,10 @@ function TouristChecks() {
       socket.off('safetycheck:response', onResponse);
     };
   }, []);
+
+  useOnReconnect(() => {
+    api.get('/safety-checks/mine').then((d) => { setCheck(d.safetyCheck); setConfig(d.config); }).catch(() => {});
+  });
 
   const isPending = check && !check.respondedAt;
   let remaining = null;

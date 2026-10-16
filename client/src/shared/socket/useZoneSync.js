@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { connectSocket } from './socket.js';
-import { tokens } from '../../api/client.js';
+import { api, tokens } from '../../api/client.js';
+import { useOnReconnect } from './useSocketStatus.js';
 
 /**
  * Keeps a `zones` state array in sync with zone:created/updated/deleted
@@ -10,6 +11,11 @@ import { tokens } from '../../api/client.js';
  * fire before AuthProvider's connect-on-login effect in the same commit.
  */
 export function useZoneSync(setZones) {
+  // Zone events missed while offline: reload the list after reconnecting.
+  useOnReconnect(() => {
+    api.get('/zones').then((d) => setZones(d.zones || [])).catch(() => {});
+  });
+
   useEffect(() => {
     const socket = connectSocket(tokens.getAccess());
 

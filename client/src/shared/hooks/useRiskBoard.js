@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, tokens } from '../../api/client.js';
 import { connectSocket } from '../socket/socket.js';
+import { useOnReconnect } from '../socket/useSocketStatus.js';
 
 const touristIdOf = (a) => a.tourist?._id || a.tourist;
 
@@ -30,6 +31,10 @@ export function useRiskBoard() {
     socket.on('risk:updated', onRisk);
     return () => socket.off('risk:updated', onRisk);
   }, []);
+
+  useOnReconnect(() => {
+    api.get('/risk').then((d) => setAssessments(d.assessments || [])).catch(() => {});
+  });
 
   const byTourist = {};
   assessments.forEach((a) => { byTourist[touristIdOf(a)] = a; });

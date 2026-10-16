@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../shared/auth/AuthContext.jsx';
 import { api, tokens } from '../../api/client.js';
 import { connectSocket } from '../../shared/socket/socket.js';
+import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
 import { useNow } from '../../shared/hooks/useNow.js';
 import Card from '../../shared/components/ui/Card.jsx';
 import Badge from '../../shared/components/ui/Badge.jsx';
@@ -56,6 +57,13 @@ function TouristHome() {
       socket.off('risk:updated', onRisk);
     };
   }, []);
+
+  useOnReconnect(() => {
+    api.get('/sos/mine').then((d) => setSosEvent(d.sosEvent)).catch(() => {});
+    api.get('/safety-checks/mine').then((d) => { setCheck(d.safetyCheck); setCheckConfig(d.config); }).catch(() => {});
+    api.get('/tourists/me').then((d) => setDevice(d.profile?.device || null)).catch(() => {});
+    api.get('/risk/mine').then((d) => setRisk(d.riskAssessment)).catch(() => {});
+  });
 
   const isOpen = sosEvent && sosEvent.status !== 'resolved' && sosEvent.status !== 'false_alarm';
   const isCheckPending = check && !check.respondedAt;

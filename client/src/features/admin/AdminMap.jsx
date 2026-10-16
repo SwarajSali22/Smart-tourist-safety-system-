@@ -4,6 +4,7 @@ import { Flame, Pause, Play, RotateCcw, Route as RouteIcon } from 'lucide-react'
 import { api, tokens } from '../../api/client.js';
 import { connectSocket } from '../../shared/socket/socket.js';
 import { useZoneSync } from '../../shared/socket/useZoneSync.js';
+import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
 import { useRiskBoard } from '../../shared/hooks/useRiskBoard.js';
 import { useNow } from '../../shared/hooks/useNow.js';
 import { useToast } from '../../shared/components/ui/Toast.jsx';
@@ -43,6 +44,9 @@ function AdminMap() {
     api.get('/zones').then((d) => setZones(d.zones || [])).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useZoneSync(setZones);
+  useOnReconnect(() => {
+    api.get('/devices').then((d) => setDevices(d.devices || [])).catch(() => {});
+  });
 
   useEffect(() => {
     const socket = connectSocket(tokens.getAccess());

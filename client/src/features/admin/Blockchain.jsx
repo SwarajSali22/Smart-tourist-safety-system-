@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link2, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { api } from '../../api/client.js';
+import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
 import { useToast } from '../../shared/components/ui/Toast.jsx';
 import Card from '../../shared/components/ui/Card.jsx';
 import DataTable from '../../shared/components/ui/DataTable.jsx';
@@ -31,6 +32,10 @@ function Blockchain() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
+
+  useOnReconnect(() => {
+    api.get('/blockchain?limit=200').then((d) => { setProofs(d.proofs || []); setTotal(d.total || 0); }).catch(() => {});
+  });
 
   async function verifyOne(id) {
     setBusyId(id);

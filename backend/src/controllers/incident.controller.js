@@ -55,6 +55,8 @@ async function acknowledgeIncident(req, res, next) {
       );
     }
 
+    // Populate for the live payload: clients render the tourist's name from it.
+    await incident.populate('tourist', 'name email');
     _emitIncidentUpdate(req, incident, sosEvent);
     return res.json({ success: true, incident, sosEvent });
   } catch (err) {
@@ -94,6 +96,8 @@ async function resolveIncident(req, res, next) {
     await recordProof('incident_resolved', 'Incident', incident);
     if (sosEvent) await recordProof('sos_resolved', 'SOSEvent', sosEvent);
 
+    // Populate for the live payload: clients render the tourist's name from it.
+    await incident.populate('tourist', 'name email');
     _emitIncidentUpdate(req, incident, sosEvent);
     return res.json({ success: true, incident, sosEvent });
   } catch (err) {

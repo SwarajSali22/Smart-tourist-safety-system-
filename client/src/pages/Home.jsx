@@ -1,6 +1,7 @@
 import { Link, Navigate } from 'react-router-dom';
 import { Link2, MapPinned, Radio, ShieldCheck, Siren } from 'lucide-react';
 import HealthStatus from '../components/HealthStatus.jsx';
+import PublicStats from '../components/PublicStats.jsx';
 import { useAuth } from '../shared/auth/AuthContext.jsx';
 import { ThemeToggle } from '../shared/theme/ThemeContext.jsx';
 
@@ -30,6 +31,7 @@ function Home() {
           <Link className="btn btn--primary" to="/login">Sign in</Link>
           <Link className="btn btn--ghost" to="/register">Create a tourist account</Link>
         </nav>
+        <PublicStats />
         <HealthStatus />
       </section>
 

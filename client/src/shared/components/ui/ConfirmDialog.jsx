@@ -19,6 +19,11 @@ function ConfirmDialog({
 }) {
   const ref = useRef(null);
   const titleId = useId();
+  // Parents pass a fresh onCancel every render. Keep it in a ref so the effect below
+  // runs only when the dialog opens/closes — otherwise every keystroke inside the
+  // dialog re-ran it and stole focus back from the input being typed into.
+  const cancelRef = useRef(onCancel);
+  useEffect(() => { cancelRef.current = onCancel; });
 
   useEffect(() => {
     if (!open) return undefined;
@@ -27,7 +32,7 @@ function ConfirmDialog({
 
     function onKey(e) {
       if (e.key === 'Escape') {
-        onCancel?.();
+        cancelRef.current?.();
         return;
       }
       if (e.key !== 'Tab' || !ref.current) return;
@@ -48,7 +53,7 @@ function ConfirmDialog({
       document.removeEventListener('keydown', onKey);
       opener?.focus?.();
     };
-  }, [open, onCancel]);
+  }, [open]);
 
   if (!open) return null;
 

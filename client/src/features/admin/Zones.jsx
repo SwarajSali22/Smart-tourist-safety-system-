@@ -3,6 +3,7 @@ import { Pencil, Shapes, Trash2, Undo2 } from 'lucide-react';
 import { api, tokens } from '../../api/client.js';
 import { connectSocket } from '../../shared/socket/socket.js';
 import { useZoneSync } from '../../shared/socket/useZoneSync.js';
+import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
 import { useToast } from '../../shared/components/ui/Toast.jsx';
 import Card from '../../shared/components/ui/Card.jsx';
 import Badge from '../../shared/components/ui/Badge.jsx';
@@ -34,7 +35,6 @@ function Zones() {
   const [editing, setEditing] = useState(null); // zone being edited
   const [editForm, setEditForm] = useState({ name: '', type: 'danger', riskLevel: 0, isActive: true });
   const [deleting, setDeleting] = useState(null); // zone pending delete
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -46,6 +46,9 @@ function Zones() {
   }, []);
 
   useZoneSync(setZones);
+  useOnReconnect(() => {
+    api.get('/geofence-events').then((d) => setEvents(d.events || [])).catch(() => {});
+  });
 
   useEffect(() => {
     const socket = connectSocket(tokens.getAccess());
@@ -103,38 +106,47 @@ function Zones() {
       toast.error('Enter a name and a risk level between 0 and 100.');
       return;
     }
-    setBusy(true);
+    const zone = editing;
+    const patch = { ...editForm, name: editForm.name.trim(), riskLevel: risk };
+    setEditing(null); // optimistic: close and show the new values straight away
+    setZones((zs) => zs.map((z) => (z._id === zone._id ? { ...z, ...patch, _pending: true } : z)));
     try {
-      await api.patch(`/zones/${editing._id}`, { ...editForm, name: editForm.name.trim(), riskLevel: risk });
+      await api.patch(`/zones/${zone._id}`, patch);
       toast.success('Zone updated.');
-      setEditing(null);
     } catch (err) {
-      toast.error(err.message || 'Failed to update zone');
-    } finally {
-      setBusy(false);
+      // roll back only if the row is still our optimistic copy (a socket update replaces it)
+      setZones((zs) => zs.map((z) => (z._id === zone._id && z._pending ? zone : z)));
+      toast.error(`Couldn’t update “${zone.name}”: ${err.message || 'request failed'}. Your changes were undone.`);
     }
   }
 
   async function confirmDelete() {
-    setBusy(true);
+    const zone = deleting;
+    const index = zones.findIndex((z) => z._id === zone._id);
+    setDeleting(null); // optimistic: remove from the list immediately
+    setZones((zs) => zs.filter((z) => z._id !== zone._id));
     try {
-      await api.delete(`/zones/${deleting._id}`);
-      toast.success(`Zone “${deleting.name}” deleted.`);
-      setDeleting(null);
+      await api.delete(`/zones/${zone._id}`);
+      toast.success(`Zone “${zone.name}” deleted.`);
     } catch (err) {
-      toast.error(err.message || 'Failed to delete zone');
-    } finally {
-      setBusy(false);
+      setZones((zs) => {
+        if (zs.some((z) => z._id === zone._id)) return zs;
+        const next = [...zs];
+        next.splice(Math.min(Math.max(index, 0), next.length), 0, zone);
+        return next;
+      });
+      toast.error(`Couldn’t delete “${zone.name}”: ${err.message || 'request failed'}. The zone was restored.`);
     }
   }
 
   async function resolveEvent(event) {
+    setEvents((es) => es.map((x) => (x._id === event._id ? { ...x, resolved: true } : x)));
     try {
       await api.patch(`/geofence-events/${event._id}/resolve`, {});
-      setEvents((es) => es.map((x) => (x._id === event._id ? { ...x, resolved: true } : x)));
       toast.success('Event marked resolved.');
     } catch (err) {
-      toast.error(err.message || 'Failed to resolve event');
+      setEvents((es) => es.map((x) => (x._id === event._id ? { ...x, resolved: false } : x)));
+      toast.error(`Couldn’t mark the event resolved: ${err.message || 'request failed'}. It was restored.`);
     }
   }
 
@@ -255,7 +267,6 @@ function Zones() {
         open={Boolean(editing)}
         title={`Edit zone`}
         confirmLabel="Save changes"
-        busy={busy}
         onConfirm={confirmEdit}
         onCancel={() => setEditing(null)}
       >
@@ -289,7 +300,6 @@ function Zones() {
         title="Delete this zone?"
         message={deleting ? `“${deleting.name}” will stop triggering alerts immediately. This can’t be undone.` : ''}
         confirmLabel="Delete zone"
-        busy={busy}
         onConfirm={confirmDelete}
         onCancel={() => setDeleting(null)}
       />

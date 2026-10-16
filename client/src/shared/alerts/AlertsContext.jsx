@@ -3,6 +3,7 @@ import { api, tokens } from '../../api/client.js';
 import { connectSocket } from '../socket/socket.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { useToast } from '../components/ui/Toast.jsx';
+import { useOnReconnect } from '../socket/useSocketStatus.js';
 import { label, RISK_RANK } from '../utils/format.js';
 
 const AlertsContext = createContext(null);
@@ -57,6 +58,12 @@ export function AlertsProvider({ children }) {
   const riskSeen = useRef(new Map());
 
   useEffect(() => { mutedRef.current = muted; }, [muted]);
+
+  // Re-sync the open-SOS set (banner) after a reconnect.
+  useOnReconnect(() => {
+    if (role === 'admin') api.get('/sos').then((d) => setActiveSos((d.events || []).filter(isOpen))).catch(() => {});
+    else if (role === 'tourist') api.get('/sos/mine').then((d) => setActiveSos(isOpen(d.sosEvent) ? [d.sosEvent] : [])).catch(() => {});
+  });
 
   const push = useCallback(
     (kind, title, message, { link = '/admin/incidents', variant = 'warning', loud = false } = {}) => {

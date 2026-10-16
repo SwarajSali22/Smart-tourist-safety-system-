@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users } from 'lucide-react';
 import { api } from '../../api/client.js';
+import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
 import { useRiskBoard } from '../../shared/hooks/useRiskBoard.js';
 import { useNow } from '../../shared/hooks/useNow.js';
 import Badge from '../../shared/components/ui/Badge.jsx';
@@ -27,6 +28,11 @@ function TouristDirectory() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
+
+  useOnReconnect(() => {
+    api.get('/tourists').then((d) => setTourists(d.tourists || [])).catch(() => {});
+    api.get('/devices').then((d) => setDevices(d.devices || [])).catch(() => {});
+  });
 
   const deviceByTourist = {};
   devices.forEach((d) => { if (d.tourist?._id) deviceByTourist[d.tourist._id] = d; });

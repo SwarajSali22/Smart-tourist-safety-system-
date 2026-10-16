@@ -107,7 +107,7 @@ real backend and database during development (37 automated API checks plus headl
 
 ### 3.2 Public pages
 
-- **Landing page** — product summary, four feature cards, Sign in / Register buttons, live backend + database health line, theme toggle. Logged-in users are redirected to their dashboard.
+- **Landing page** — product summary, three live platform numbers (tourists protected, active zones, incidents resolved — from the public `GET /api/stats`, with a count-up that is skipped for `prefers-reduced-motion`), four feature cards, Sign in / Register buttons, live backend + database health line, theme toggle. Logged-in users are redirected to their dashboard.
 - **Login** and **Register** — inline error messages, loading states, return-to-previous-page after login.
 - **404 page** with a way back home.
 
@@ -222,6 +222,9 @@ real backend and database during development (37 automated API checks plus headl
 - Readable labels (e.g. "No response", not `no_response`) and relative times ("3 min ago").
 - Responsive layouts at desktop, tablet and phone widths (no horizontal page scroll in the tested pages).
 - Dark theme (follows the system until you choose).
+- **Connection pill** in the top bar: green *Live*, amber *Reconnecting…*, red *Offline* (after 20 s without a connection, or when the browser goes offline). When the socket reconnects, every open page refetches what it may have missed (devices, incidents, SOS, zones, risk, tourists, check-ins, proofs, analytics).
+- **Optimistic updates with rollback:** acknowledging/resolving an incident, marking a geofence event resolved, and editing/deleting a zone update the screen immediately; if the server rejects the change, the previous state is restored and an error toast explains why.
+- **Smooth maps:** markers glide between pings (~1 s, eased) on both admin and tourist maps; disabled for `prefers-reduced-motion` and skipped for large jumps.
 - Skip-to-content link, labelled form controls, status messages announced to screen readers, keyboard-operable table rows, focus rings, and reduced-motion support. Colour is never the only signal (badges carry text).
 
 ---
@@ -233,6 +236,7 @@ Base URL `http://localhost:5000/api`. Send `Authorization: Bearer <accessToken>`
 | Area | Endpoint | Who |
 |---|---|---|
 | Health | `GET /health` | public |
+| Stats | `GET /stats` → `{ touristsProtected, activeZones, incidentsResolved }` (counts only, cached 30 s) | public |
 | Auth | `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`; `GET /auth/me` | public / any |
 | Tourists | `GET /tourists` | admin |
 | | `GET /tourists/me` | tourist, admin |

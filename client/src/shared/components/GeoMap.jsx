@@ -41,6 +41,51 @@ function markerKind(device, risk) {
   return risk?.level || 'idle';
 }
 
+// A Marker that glides to its new position (~1 s, eased) instead of jumping
+// when a new ping arrives. Moves the Leaflet marker directly with
+// requestAnimationFrame, so React doesn't re-render 60 times a second.
+// Honors prefers-reduced-motion and skips the glide for big jumps (a first
+// fix or a GPS correction), where animating would just look like a streak.
+const GLIDE_MS = 1000;
+const MAX_GLIDE_DEG = 0.05; // ~5 km
+function SmoothMarker({ position, ...props }) {
+  const markerRef = useRef(null);
+  const [initial] = useState(position); // react-leaflet only sees the first position; we drive the rest
+  const current = useRef(position);
+  const frame = useRef(0);
+  const [lat, lng] = position;
+
+  useEffect(() => {
+    const marker = markerRef.current;
+    if (!marker) return undefined;
+    const from = current.current;
+    if (from[0] === lat && from[1] === lng) return undefined;
+
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const far = Math.abs(lat - from[0]) + Math.abs(lng - from[1]) > MAX_GLIDE_DEG;
+    if (reduced || far) {
+      current.current = [lat, lng];
+      marker.setLatLng([lat, lng]);
+      return undefined;
+    }
+
+    const start = performance.now();
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / GLIDE_MS);
+      const e = t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2; // easeInOutQuad
+      const next = [from[0] + (lat - from[0]) * e, from[1] + (lng - from[1]) * e];
+      current.current = next;
+      marker.setLatLng(next);
+      if (t < 1) frame.current = requestAnimationFrame(step);
+    };
+    cancelAnimationFrame(frame.current);
+    frame.current = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame.current);
+  }, [lat, lng]);
+
+  return <Marker ref={markerRef} position={initial} {...props} />;
+}
+
 function ClickCapture({ onMapClick }) {
   useMapEvents({
     click(e) {
@@ -193,7 +238,7 @@ function GeoMap({
         )}
 
         {userPosition && (
-          <Marker position={[userPosition.lat, userPosition.lng]} icon={userIcon}>
+          <SmoothMarker position={[userPosition.lat, userPosition.lng]} icon={userIcon}>
             <Popup>
               <strong>Your location</strong>
               {typeof userPosition.accuracy === 'number' && (
@@ -203,7 +248,7 @@ function GeoMap({
                 </>
               )}
             </Popup>
-          </Marker>
+          </SmoothMarker>
         )}
 
         {devices
@@ -212,7 +257,7 @@ function GeoMap({
             const risk = riskByTourist[d.tourist?._id || d.tourist];
             const kind = markerKind(d, risk);
             return (
-              <Marker
+              <SmoothMarker
                 key={d._id}
                 position={[d.lastLocation.lat, d.lastLocation.lng]}
                 icon={deviceIcon(selectedDeviceId === d.deviceId ? `${kind} device-marker--selected` : kind)}
@@ -242,7 +287,7 @@ function GeoMap({
                     </>
                   )}
                 </Popup>
-              </Marker>
+              </SmoothMarker>
             );
           })}
       </MapContainer>

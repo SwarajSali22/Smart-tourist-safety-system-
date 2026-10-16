@@ -4,6 +4,7 @@ import { Menu, MoreHorizontal, ShieldCheck, Siren, TriangleAlert, X } from 'luci
 import { useAuth } from '../auth/AuthContext.jsx';
 import { AlertsProvider, useAlerts } from '../alerts/AlertsContext.jsx';
 import AlertBell from '../alerts/AlertBell.jsx';
+import ConnectionStatus from '../components/ConnectionStatus.jsx';
 import { ThemeToggle } from '../theme/ThemeContext.jsx';
 import { NAV, ROLE_HOME, ROLE_TITLE } from '../navConfig.js';
 import UserMenu from './UserMenu.jsx';
@@ -128,6 +129,7 @@ function ShellInner() {
           </button>
           <Link to={ROLE_HOME[role]} className="app-topbar__brand">{ROLE_TITLE[role]}</Link>
           <div className="app-topbar__tools">
+            <ConnectionStatus />
             <AlertBell />
             <ThemeToggle />
             <UserMenu user={user} onLogout={handleLogout} />
