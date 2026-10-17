@@ -24,6 +24,13 @@ const loginSchema = z.object({
 });
 const refreshSchema = z.object({ refreshToken: z.string().min(10).max(2000) });
 
+const responderCreateSchema = z.object({
+  name: trimmed(1, 100, 'name'),
+  email: z.string().trim().toLowerCase().email('must be a valid email').max(200),
+  password: z.string().min(8, 'must be at least 8 characters').max(128),
+  phone: phone.optional().or(z.literal('')),
+});
+
 // ── tourists ──
 const locationSchema = z.object({
   lat: z.number().min(-90).max(90),
@@ -116,6 +123,31 @@ const incidentListQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+// ── help centers ──
+const helpType = z.enum(['hospital', 'police', 'fire', 'embassy', 'pharmacy', 'other']);
+const helpCenterCreateSchema = z.object({
+  name: trimmed(1, 120, 'name'),
+  type: helpType.default('other'),
+  phone: z.string().trim().regex(/^\+?[\d\s()-]{3,20}$/, 'must be a valid phone number').nullable().optional().or(z.literal('')),
+  address: z.string().trim().max(300).nullable().optional(),
+  location: z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) }),
+});
+const helpCenterUpdateSchema = z.object({
+  name: trimmed(1, 120, 'name').optional(),
+  type: helpType.optional(),
+  phone: z.string().trim().regex(/^\+?[\d\s()-]{3,20}$/, 'must be a valid phone number').nullable().optional().or(z.literal('')),
+  address: z.string().trim().max(300).nullable().optional(),
+  location: z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) }).optional(),
+  isActive: z.boolean().optional(),
+});
+const nearbyQuery = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180),
+  limit: z.coerce.number().int().min(1).max(50).default(5),
+  maxKm: z.coerce.number().min(0.1).max(20000).default(50),
+  type: helpType.optional(),
+});
+
 // ── notifications ──
 const notificationListQuery = z.object({
   unread: z.enum(['1', 'true']).optional(),
@@ -125,11 +157,12 @@ const notificationListQuery = z.object({
 
 module.exports = {
   objectId, idParams,
-  registerSchema, loginSchema, refreshSchema,
+  registerSchema, loginSchema, refreshSchema, responderCreateSchema,
   locationSchema, contactsSchema, itinerarySchema,
   zoneCreateSchema, zoneUpdateSchema,
   deviceRegisterSchema, telemetrySchema,
   checkRespondSchema, checkTriggerSchema,
   incidentStatusSchema, incidentNoteSchema, incidentResolveSchema, incidentListQuery,
   notificationListQuery,
+  helpCenterCreateSchema, helpCenterUpdateSchema, nearbyQuery,
 };

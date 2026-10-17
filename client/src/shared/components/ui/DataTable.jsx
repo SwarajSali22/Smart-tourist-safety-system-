@@ -1,5 +1,6 @@
 import { Fragment, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Download, Search } from 'lucide-react';
+import { downloadCsv } from '../../utils/csv.js';
 import EmptyState from './EmptyState.jsx';
 
 /**
@@ -14,6 +15,10 @@ import EmptyState from './EmptyState.jsx';
  * table shows `rows` exactly as given. Provide `sort={{ key, dir }}` + `onSort(key)`
  * for header clicks and `pagination={{ page, pages, total, pageSize, onPage }}`.
  * The search box is the caller's job (put it in `toolbar`).
+ *
+ * CSV: pass `csvName="devices.csv"` and give columns a `csvValue(row)` to get an "Export CSV" button that
+ * exports ALL currently filtered/sorted rows (not just the visible page). In server mode pass
+ * `onExportCsv` instead (the server builds the file from the same filters).
  */
 function DataTable({
   columns,
@@ -32,6 +37,8 @@ function DataTable({
   renderExpanded,
   caption,
   manual = false,
+  csvName,
+  onExportCsv,
   sort: serverSort,
   onSort,
   pagination,
@@ -76,7 +83,19 @@ function DataTable({
     setSort((s) => (s.key === col.key ? { key: col.key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key: col.key, dir: 'asc' }));
   }
 
-  const showToolbar = searchText || toolbar;
+  const exportable = columns.filter((c) => c.csvValue);
+  const canExport = Boolean(onExportCsv || (csvName && exportable.length));
+  const [exporting, setExporting] = useState(false);
+  async function exportCsv() {
+    if (onExportCsv) {
+      setExporting(true);
+      try { await onExportCsv(); } finally { setExporting(false); }
+    } else {
+      downloadCsv(csvName, exportable.map((c) => ({ header: c.csvHeader || (typeof c.header === 'string' ? c.header : c.key), value: c.csvValue })), sorted);
+    }
+  }
+
+  const showToolbar = searchText || toolbar || canExport;
 
   return (
     <div className="data-table-block">
@@ -95,6 +114,11 @@ function DataTable({
             </label>
           )}
           {toolbar}
+          {canExport && rows.length > 0 && (
+            <button type="button" className="btn btn--ghost btn--sm table-export" onClick={exportCsv} disabled={exporting}>
+              <Download size={14} aria-hidden="true" /> {exporting ? 'Exporting…' : 'Export CSV'}
+            </button>
+          )}
         </div>
       )}
 

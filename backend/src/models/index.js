@@ -13,6 +13,7 @@ const RiskAssessment = require('./RiskAssessment');
 const Incident = require('./Incident');
 const Notification = require('./Notification');
 const AuditProof = require('./AuditProof');
+const HelpCenter = require('./HelpCenter');
 
 module.exports = {
   User,
@@ -27,4 +28,5 @@ module.exports = {
   Incident,
   Notification,
   AuditProof,
+  HelpCenter,
 };

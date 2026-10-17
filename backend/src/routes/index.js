@@ -13,6 +13,8 @@ const blockchainRoutes = require('./blockchain.routes');
 const analyticsRoutes = require('./analytics.routes');
 const statsRoutes = require('./stats.routes');
 const notificationRoutes = require('./notification.routes');
+const userRoutes = require('./user.routes');
+const helpCenterRoutes = require('./helpCenter.routes');
 
 const router = express.Router();
 
@@ -30,5 +32,7 @@ router.use('/blockchain', blockchainRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/stats', statsRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/users', userRoutes);
+router.use('/help-centers', helpCenterRoutes);
 
 module.exports = router;

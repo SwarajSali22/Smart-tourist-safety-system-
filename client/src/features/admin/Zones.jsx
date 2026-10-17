@@ -188,6 +188,11 @@ function Zones() {
     { key: 'createdAt', header: 'When', sortValue: (e) => new Date(e.createdAt).getTime(), render: (e) => formatDateTime(e.createdAt) },
   ];
 
+  const ZCSV = { name: (z) => z.name, type: (z) => z.type, riskLevel: (z) => z.riskLevel, isActive: (z) => (z.isActive ? 'yes' : 'no') };
+  zoneColumns.forEach((c) => { if (ZCSV[c.key]) c.csvValue = ZCSV[c.key]; });
+  const ECSV = { tourist: (e) => e.tourist?.name || '', zone: (e) => e.zone?.name || '', eventType: (e) => e.eventType, resolved: (e) => (e.resolved ? 'yes' : 'no'), createdAt: (e) => e.createdAt || '' };
+  eventColumns.forEach((c) => { if (ECSV[c.key]) c.csvValue = ECSV[c.key]; });
+
   if (loading) {
     return (
       <div className="app-page">
@@ -255,6 +260,7 @@ function Zones() {
           emptyText="Draw a polygon on the map above to create your first geofence."
           pageSize={8}
           caption="Geofence zones"
+            csvName="zones.csv"
         />
       </Card>
 
@@ -268,6 +274,7 @@ function Zones() {
           emptyText="Enter and exit events are logged as tourists cross zone boundaries."
           pageSize={8}
           caption="Recent geofence events"
+            csvName="geofence-events.csv"
         />
       </Card>
 

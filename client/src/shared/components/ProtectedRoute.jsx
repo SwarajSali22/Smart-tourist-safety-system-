@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
 import Spinner from './ui/Spinner.jsx';
+import { ROLE_HOME } from '../navConfig.js';
 
 /**
  * Wraps a route so only authenticated users (of the right role) can access it.
@@ -22,7 +23,7 @@ function ProtectedRoute({ role, children }) {
 
   if (role && user.role !== role) {
     // Authenticated but wrong role — send to their own home
-    return <Navigate to={user.role === 'admin' ? '/admin' : '/tourist'} replace />;
+    return <Navigate to={ROLE_HOME[user.role] || '/login'} replace />;
   }
 
   return children;

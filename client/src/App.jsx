@@ -21,6 +21,10 @@ import Analytics         from './features/admin/Analytics.jsx';
 import Blockchain        from './features/admin/Blockchain.jsx';
 import IncidentDetail    from './features/admin/IncidentDetail.jsx';
 import NotificationsPage from './features/shared/NotificationsPage.jsx';
+import ResponderHome     from './features/responder/ResponderHome.jsx';
+import TouristDetail     from './features/admin/TouristDetail.jsx';
+import Team              from './features/admin/Team.jsx';
+import HelpCenters       from './features/admin/HelpCenters.jsx';
 
 import TouristHome       from './features/tourist/TouristHome.jsx';
 import TouristProfile    from './features/tourist/TouristProfile.jsx';
@@ -52,6 +56,9 @@ function App() {
         >
           <Route index            element={<AdminHome />} />
           <Route path="tourists"  element={<TouristDirectory />} />
+          <Route path="tourists/:id" element={<TouristDetail />} />
+          <Route path="team" element={<Team />} />
+          <Route path="help-centers" element={<HelpCenters />} />
           <Route path="devices"   element={<Devices />} />
           <Route path="zones"     element={<Zones />} />
           <Route path="incidents" element={<Incidents />} />
@@ -60,6 +67,20 @@ function App() {
           <Route path="map"       element={<AdminMap />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="blockchain" element={<Blockchain />} />
+        </Route>
+
+        {/* Responder — only the incidents assigned to them */}
+        <Route
+          path="/responder"
+          element={
+            <ProtectedRoute role="responder">
+              <AppShell />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<ResponderHome />} />
+          <Route path="incidents/:id" element={<IncidentDetail />} />
+          <Route path="notifications" element={<NotificationsPage />} />
         </Route>
 
         {/* Tourist — requires role=tourist */}

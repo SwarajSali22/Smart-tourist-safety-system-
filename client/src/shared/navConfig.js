@@ -1,5 +1,5 @@
 import {
-  BarChart3, ClipboardCheck, Home, LayoutDashboard, Link2, MapPin, Radar, Shapes, Siren, User, Users, Watch,
+  BarChart3, ClipboardCheck, ClipboardList, Home, LayoutDashboard, LifeBuoy, Link2, MapPin, Radar, Shapes, Siren, User, Users, UsersRound, Watch,
 } from 'lucide-react';
 
 /**
@@ -18,6 +18,12 @@ export const NAV = {
     { to: '/admin/devices',    label: 'Devices',      icon: Watch },
     { to: '/admin/analytics',  label: 'Analytics',    icon: BarChart3 },
     { to: '/admin/blockchain', label: 'Audit proofs', icon: Link2 },
+    { to: '/admin/help-centers', label: 'Help centers', icon: LifeBuoy },
+    { to: '/admin/team',       label: 'Team',         icon: UsersRound },
+  ],
+  // Responders see only the incidents assigned to them (the server enforces this).
+  responder: [
+    { to: '/responder', label: 'My assignments', icon: ClipboardList, end: true },
   ],
   // Order matters: SOS sits in the centre slot of the 5-item mobile tab bar.
   tourist: [
@@ -29,5 +35,5 @@ export const NAV = {
   ],
 };
 
-export const ROLE_HOME = { admin: '/admin', tourist: '/tourist' };
-export const ROLE_TITLE = { admin: 'STS Admin', tourist: 'Smart Tourist Safety' };
+export const ROLE_HOME = { admin: '/admin', tourist: '/tourist', responder: '/responder' };
+export const ROLE_TITLE = { admin: 'STS Admin', tourist: 'Smart Tourist Safety', responder: 'STS Responder' };

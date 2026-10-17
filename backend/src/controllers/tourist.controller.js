@@ -1,4 +1,4 @@
-const { User, TouristProfile, Device } = require('../models');
+const { User, TouristProfile, Device, Incident, RiskAssessment, GeofenceEvent, SafetyCheck, SOSEvent } = require('../models');
 
 // ── GET /api/tourists  (admin only) ──────────────────────────────────────────
 async function listTourists(req, res, next) {
@@ -117,4 +117,42 @@ async function updateItinerary(req, res, next) {
   }
 }
 
-module.exports = { listTourists, getMyProfile, updateEmergencyContacts, updateItinerary };
+// ── GET /api/tourists/:id  (admin) — everything the team needs about one tourist ──
+async function getTouristDetail(req, res, next) {
+  try {
+    const user = await User.findOne({ _id: req.params.id, role: 'tourist' }).select('-passwordHash').lean();
+    if (!user) return res.status(404).json({ success: false, message: 'Tourist not found' });
+
+    const [profile, device, risk, riskHistory, incidents, activeCount, geofence, checks, sos] = await Promise.all([
+      TouristProfile.findOne({ user: user._id }).lean(),
+      Device.findOne({ tourist: user._id }).select('-apiKeyHash').lean(),
+      RiskAssessment.findOne({ tourist: user._id }).sort({ evaluatedAt: -1 }).lean(),
+      RiskAssessment.find({ tourist: user._id }).sort({ evaluatedAt: -1 }).limit(20).select('score level evaluatedAt ruleTriggered ruleName').lean(),
+      Incident.find({ tourist: user._id }).sort({ createdAt: -1 }).limit(10).select('type severity status createdAt resolvedAt').lean(),
+      Incident.countDocuments({ tourist: user._id, status: { $in: ['open', 'in_progress', 'assigned', 'en_route'] } }),
+      GeofenceEvent.find({ tourist: user._id }).sort({ createdAt: -1 }).limit(10).populate('zone', 'name type').lean(),
+      SafetyCheck.find({ tourist: user._id }).sort({ scheduledAt: -1 }).limit(10).select('scheduledAt respondedAt response escalated').lean(),
+      SOSEvent.find({ tourist: user._id }).sort({ createdAt: -1 }).limit(5).select('source status createdAt acknowledgedAt resolvedAt').lean(),
+    ]);
+    const answered = checks.filter((c) => c.respondedAt).length;
+
+    return res.json({
+      success: true,
+      tourist: user,
+      profile: profile ? { emergencyContacts: profile.emergencyContacts || [], itinerary: profile.itinerary || [], nationality: profile.nationality, language: profile.language } : null,
+      device,
+      risk,
+      riskHistory: [...riskHistory].reverse(),
+      incidents,
+      activeIncidents: activeCount,
+      geofenceEvents: geofence,
+      safetyChecks: checks,
+      checkInRate: checks.length ? Math.round((answered / checks.length) * 100) : null,
+      sos,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { listTourists, getTouristDetail, getMyProfile, updateEmergencyContacts, updateItinerary };

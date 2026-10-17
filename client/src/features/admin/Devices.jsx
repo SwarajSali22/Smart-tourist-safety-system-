@@ -117,6 +117,13 @@ function Devices() {
     { key: 'location', header: 'Last location', render: (d) => (d.lastLocation?.lat != null ? `${d.lastLocation.lat.toFixed(4)}, ${d.lastLocation.lng.toFixed(4)}` : '—') },
   ];
 
+  const CSV = {
+    deviceId: (d) => d.deviceId, type: (d) => sourceOf(d), tourist: (d) => d.tourist?.name || '', status: (d) => d.status,
+    battery: (d) => (typeof d.battery === 'number' ? d.battery : ''), lastSeen: (d) => d.lastSeen || '',
+    location: (d) => (d.lastLocation?.lat != null ? `${d.lastLocation.lat},${d.lastLocation.lng}` : ''),
+  };
+  columns.forEach((c) => { if (CSV[c.key]) c.csvValue = CSV[c.key]; });
+
   return (
     <div className="app-page">
       <h1 className="page-title">Devices</h1>
@@ -171,6 +178,7 @@ function Devices() {
             emptyAction={<a className="btn btn--primary btn--sm" href="#register-device">Register a device</a>}
             emptyText="Phones appear automatically when a tourist shares their location. For a wristband, register one above and run scripts/simulateGps.js with the issued key."
             caption="Registered devices"
+            csvName="devices.csv"
           />
         )}
       </Card>

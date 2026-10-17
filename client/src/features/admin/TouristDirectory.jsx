@@ -41,7 +41,7 @@ function TouristDirectory() {
   devices.forEach((d) => { if (d.tourist?._id) deviceByTourist[d.tourist._id] = d; });
 
   const columns = [
-    { key: 'name', header: 'Name', sortValue: (t) => t.name.toLowerCase(), render: (t) => <Link to={`/admin/map?tourist=${t._id}`}>{t.name}</Link> },
+    { key: 'name', header: 'Name', sortValue: (t) => t.name.toLowerCase(), render: (t) => <Link to={`/admin/tourists/${t._id}`}>{t.name}</Link> },
     { key: 'email', header: 'Email', sortValue: (t) => t.email },
     { key: 'phone', header: 'Phone', render: (t) => t.phone || '—' },
     { key: 'device', header: 'Device', render: (t) => (deviceByTourist[t._id] ? <span className="badge-row">{deviceByTourist[t._id].deviceId} <Badge variant={sourceOf(deviceByTourist[t._id]) === 'Simulator' ? 'info' : 'neutral'}>{sourceOf(deviceByTourist[t._id])}</Badge></span> : '—') },
@@ -66,6 +66,13 @@ function TouristDirectory() {
       return true;
     })
     .sort((a, b) => (RISK_RANK[risk.byTourist[b._id]?.level] ?? -1) - (RISK_RANK[risk.byTourist[a._id]?.level] ?? -1));
+
+  const CSV = {
+    name: (t) => t.name, email: (t) => t.email, phone: (t) => t.phone || '',
+    device: (t) => deviceByTourist[t._id]?.deviceId || '', risk: (t) => risk.byTourist[t._id]?.level || '',
+    lastSeen: (t) => deviceByTourist[t._id]?.lastSeen || '', isActive: (t) => (t.isActive ? 'active' : 'inactive'),
+  };
+  columns.forEach((c) => { if (CSV[c.key]) c.csvValue = CSV[c.key]; });
 
   return (
     <div className="app-page">
@@ -99,6 +106,7 @@ function TouristDirectory() {
             emptyText="Tourists appear here after they register from the public sign-up page. Once they do, assign each one a device."
             emptyAction={<Link className="btn btn--primary btn--sm" to="/admin/devices">Go to Devices</Link>}
             caption="Registered tourists"
+            csvName="tourists.csv"
           />
         )}
       </Card>

@@ -4,6 +4,7 @@ import HealthStatus from '../components/HealthStatus.jsx';
 import PublicStats from '../components/PublicStats.jsx';
 import { useAuth } from '../shared/auth/AuthContext.jsx';
 import { ThemeToggle } from '../shared/theme/ThemeContext.jsx';
+import { ROLE_HOME } from '../shared/navConfig.js';
 
 const FEATURES = [
   { icon: MapPinned, title: 'GPS geofencing', text: 'Safe, restricted and danger zones with instant alerts when a tourist crosses a boundary.' },
@@ -17,7 +18,7 @@ function Home() {
 
   // Already logged in — redirect straight to their dashboard
   if (!loading && user) {
-    return <Navigate to={user.role === 'admin' ? '/admin' : '/tourist'} replace />;
+    return <Navigate to={ROLE_HOME[user.role] || '/'} replace />;
   }
 
   return (

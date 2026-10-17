@@ -96,6 +96,12 @@ function Blockchain() {
     },
   ];
 
+  const PCSV = {
+    seq: (p) => p.chainRef.sequenceNo, eventType: (p) => p.eventType, hash: (p) => p.dataHash,
+    createdAt: (p) => p.createdAt || '', status: (p) => results[p._id]?.status || 'not checked',
+  };
+  columns.forEach((c) => { if (PCSV[c.key]) c.csvValue = PCSV[c.key]; });
+
   return (
     <div className="app-page">
       <h1 className="page-title">Audit proofs</h1>
@@ -154,6 +160,7 @@ function Blockchain() {
               </div>
             )}
             caption="Audit proofs, newest first. Select a row for the full hashes."
+            csvName="audit-proofs.csv"
           />
         )}
       </Card>

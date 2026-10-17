@@ -2,6 +2,7 @@ const { Incident, SOSEvent, Device, User } = require('../../models');
 const { recordProof } = require('../blockchain/auditChain');
 const { notifyUser } = require('../notifications/notify');
 const { getIo } = require('../realtime');
+const thresholds = require('../../config/thresholds');
 
 /**
  * Incident lifecycle:  New → Acknowledged → Assigned → En Route → Resolved → Closed
@@ -43,6 +44,14 @@ const TOURIST_MESSAGE = {
   en_route: ['Help is on the way', 'A responder is heading to your location.', 'warning'],
   resolved: ['Your incident was resolved', 'The incident has been marked resolved.', 'info'],
 };
+
+/** True when an active incident has sat in its current state longer than the target in config/thresholds.js. */
+function isOverdue(incident, now = Date.now()) {
+  const limit = thresholds.incidentOverdueMs[incident.status];
+  if (!limit) return false;
+  const last = incident.lastActivity?.at || incident.timeline?.[incident.timeline.length - 1]?.at || incident.updatedAt || incident.createdAt;
+  return now - new Date(last).getTime() > limit;
+}
 
 async function validateAssignee(assigneeId) {
   const user = await User.findById(assigneeId).select('role isActive name').lean();
@@ -135,7 +144,7 @@ async function transitionIncident({ id, to, actor, note, assignee }) {
   if (assigneeUser && String(set.assignedAdmin) !== String(actor.id)) {
     await notifyUser(set.assignedAdmin, {
       type: 'incident_update', title: 'Incident assigned to you', message: 'Open the incident to respond.',
-      severity: 'warning', link: `/admin/incidents/${updated._id}`,
+      severity: 'warning', link: `${assigneeUser.role === 'responder' ? '/responder' : '/admin'}/incidents/${updated._id}`,
       payload: { incident: updated._id, tourist: touristId },
       dedupeKey: `incident-assign:${updated._id}:${set.assignedAdmin}`,
     });
@@ -148,6 +157,7 @@ async function transitionIncident({ id, to, actor, note, assignee }) {
   if (io) {
     io.to('admin').emit('incident:updated', updated);
     io.to(`tourist:${touristId}`).emit('incident:updated', updated);
+    if (updated.assignedAdmin?._id) io.to(`user:${updated.assignedAdmin._id}`).emit('incident:updated', updated); // the assignee (admin or responder)
     if (sosEvent) {
       io.to('admin').emit('sos:updated', sosEvent);
       io.to(`tourist:${touristId}`).emit('sos:updated', sosEvent);
@@ -167,4 +177,4 @@ async function addIncidentNote({ id, actor, note }) {
   return updated;
 }
 
-module.exports = { transitionIncident, addIncidentNote, LifecycleError, ALLOWED, LABEL, ACTIVE_STATUSES };
+module.exports = { transitionIncident, addIncidentNote, isOverdue, LifecycleError, ALLOWED, LABEL, ACTIVE_STATUSES };

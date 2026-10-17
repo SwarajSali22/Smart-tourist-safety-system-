@@ -12,7 +12,8 @@ import ConfirmDialog from '../../shared/components/ui/ConfirmDialog.jsx';
 import ErrorState from '../../shared/components/ui/ErrorState.jsx';
 import { SkeletonRows } from '../../shared/components/ui/Skeleton.jsx';
 import { ProofBadge, ProofChecks } from '../../shared/components/ProofStatus.jsx';
-import { FRESH_LABEL, FRESH_VARIANT, freshnessOf, incidentOverdue, sourceOf } from '../../shared/utils/freshness.js';
+import { useAuth } from '../../shared/auth/AuthContext.jsx';
+import { FRESH_LABEL, FRESH_VARIANT, freshnessOf, sourceOf } from '../../shared/utils/freshness.js';
 import { formatDateTime, label, timeAgo } from '../../shared/utils/format.js';
 import { SEVERITY_BADGE, STATUS_BADGE } from './Incidents.jsx';
 
@@ -22,9 +23,11 @@ const ALLOWED = {
   open: ['in_progress', 'resolved'], in_progress: ['assigned', 'resolved'], assigned: ['en_route', 'resolved'],
   en_route: ['resolved'], resolved: ['closed'], closed: [],
 };
+// What a responder may do (the server enforces it): only their own assignments, en route → resolved.
+const RESPONDER_MOVES = ['en_route', 'resolved'];
 const ACTION = {
   in_progress: { text: 'Acknowledge', variant: 'btn--primary' },
-  assigned: { text: 'Assign to me', variant: 'btn--primary' },
+  assigned: { text: 'Assign…', variant: 'btn--primary' },
   en_route: { text: 'Mark en route', variant: 'btn--primary' },
   resolved: { text: 'Resolve…', variant: 'btn--primary' },
   closed: { text: 'Close incident', variant: 'btn--ghost' },
@@ -32,6 +35,10 @@ const ACTION = {
 
 function IncidentDetail() {
   const { id } = useParams();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const allowedFor = (status) => (ALLOWED[status] || []).filter((s) => isAdmin || RESPONDER_MOVES.includes(s));
+  const backTo = isAdmin ? '/admin/incidents' : '/responder';
   const navigate = useNavigate();
   const toast = useToast();
   const now = useNow(30000);
@@ -44,6 +51,9 @@ function IncidentDetail() {
   const [proofs, setProofs] = useState(undefined);
   const [verified, setVerified] = useState({});
   const [verifyingId, setVerifyingId] = useState(null);
+  const [assigning, setAssigning] = useState(false);
+  const [people, setPeople] = useState(null);
+  const [assignee, setAssignee] = useState('');
 
   const load = useCallback(() => {
     return api.get(`/incidents/${id}`)
@@ -52,9 +62,11 @@ function IncidentDetail() {
   }, [id]);
 
   const loadProofs = useCallback(() => {
+    if (!isAdmin) { setProofs([]); return; }
     api.get(`/blockchain/incident/${id}`).then((d) => setProofs(d.proofs || [])).catch(() => setProofs([]));
-  }, [id]);
+  }, [id, isAdmin]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); loadProofs(); }, [load, loadProofs]);
   useOnReconnect(() => { load(); loadProofs(); });
 
@@ -72,11 +84,11 @@ function IncidentDetail() {
     setData((d) => ({
       ...d,
       incident: { ...d.incident, status: to, timeline: [...d.incident.timeline, { at, actorLabel: 'admin', action: `${label(d.incident.status)} → ${label(to)}`, metadata: { from: d.incident.status, to, note: extra.note } }] },
-      allowedNext: ALLOWED[to] || [],
+      allowedNext: allowedFor(to),
     }));
     setBusy(true);
     try {
-      await api.patch(`/incidents/${id}/status`, { status: to, ...(extra.note ? { note: extra.note } : {}) });
+      await api.patch(`/incidents/${id}/status`, { status: to, ...(extra.note ? { note: extra.note } : {}), ...(extra.assignee ? { assignee: extra.assignee } : {}) });
       toast.success(`Incident is now ${label(to)}.`);
     } catch (err) {
       setData(before);
@@ -103,6 +115,14 @@ function IncidentDetail() {
     }
   }
 
+  async function openAssign() {
+    setAssigning(true);
+    setAssignee(user.id);
+    if (!people) {
+      api.get('/users/assignable').then((d) => setPeople(d.users || [])).catch((e) => toast.error(`Couldn’t load the team: ${e.message}`));
+    }
+  }
+
   async function verify(proofId) {
     setVerifyingId(proofId);
     try {
@@ -122,7 +142,7 @@ function IncidentDetail() {
   if (error && !data) {
     return (
       <div className="app-page">
-        <Link className="btn btn--ghost btn--sm" to="/admin/incidents"><ArrowLeft size={14} aria-hidden="true" /> Incidents</Link>
+        <Link className="btn btn--ghost btn--sm" to={backTo}><ArrowLeft size={14} aria-hidden="true" /> Back</Link>
         <div className="mt-4"><ErrorState message={error} onRetry={load} /></div>
       </div>
     );
@@ -130,16 +150,16 @@ function IncidentDetail() {
   if (!data) return <div className="app-page"><SkeletonRows rows={8} /></div>;
 
   const { incident, sosEvent, sms, device } = data;
-  const next = ALLOWED[incident.status] || [];
+  const next = isAdmin ? allowedFor(incident.status) : (data.allowedNext || []);
   const stageIndex = STAGES.indexOf(incident.status);
   const tourist = incident.tourist || {};
   const fresh = device ? freshnessOf(device.lastSeen, now) : 'never';
-  const overdue = incidentOverdue({ ...incident, lastActivity: incident.timeline[incident.timeline.length - 1] }, now);
+  const overdue = Boolean(data.overdue);
   const loc = sosEvent?.location || device?.lastLocation;
 
   return (
     <div className="app-page">
-      <Link className="btn btn--ghost btn--sm" to="/admin/incidents"><ArrowLeft size={14} aria-hidden="true" /> All incidents</Link>
+      <Link className="btn btn--ghost btn--sm" to={backTo}><ArrowLeft size={14} aria-hidden="true" /> {isAdmin ? 'All incidents' : 'My assignments'}</Link>
 
       <h1 className="page-title mt-4">
         {label(incident.type)}: {tourist.name || 'Unknown tourist'}
@@ -167,15 +187,20 @@ function IncidentDetail() {
               type="button"
               className={`btn btn--sm ${ACTION[to].variant}`}
               disabled={busy}
-              onClick={() => (to === 'resolved' ? setResolving(true) : move(to))}
+              onClick={() => (to === 'resolved' ? setResolving(true) : to === 'assigned' ? openAssign() : move(to))}
             >
               {ACTION[to].text}
             </button>
           ))}
-          {tourist._id && (
+          {isAdmin && tourist._id && (
             <button type="button" className="btn btn--ghost btn--sm" onClick={() => navigate(`/admin/map?tourist=${tourist._id}`)}>
               <MapPin size={14} aria-hidden="true" /> Jump to map
             </button>
+          )}
+          {!isAdmin && loc?.lat != null && (
+            <a className="btn btn--ghost btn--sm" href={`https://www.openstreetmap.org/?mlat=${loc.lat}&mlon=${loc.lng}#map=17/${loc.lat}/${loc.lng}`} target="_blank" rel="noreferrer">
+              <MapPin size={14} aria-hidden="true" /> Open position in a map
+            </a>
           )}
           {next.length === 0 && <span className="form-hint">This incident is closed — no further actions.</span>}
         </div>
@@ -208,7 +233,7 @@ function IncidentDetail() {
         <div className="detail-side">
           <Card title="Tourist">
             <dl className="kv">
-              <dt>Name</dt><dd>{tourist.name || '—'}</dd>
+              <dt>Name</dt><dd>{isAdmin && tourist._id ? <Link to={`/admin/tourists/${tourist._id}`}>{tourist.name || '—'}</Link> : (tourist.name || '—')}</dd>
               <dt>Email</dt><dd>{tourist.email || '—'}</dd>
               <dt>Phone</dt><dd>{tourist.phone || '—'}</dd>
             </dl>
@@ -243,7 +268,7 @@ function IncidentDetail() {
             </Card>
           )}
 
-          <Card title="Audit proofs" className="mt-4">
+          {isAdmin && <Card title="Audit proofs" className="mt-4">
             <p className="form-hint"><ShieldCheck size={13} aria-hidden="true" /> Database hash chain (not a public blockchain).</p>
             {proofs === undefined ? <p className="placeholder-text">Loading…</p> : proofs.length === 0 ? (
               <p className="placeholder-text">No proofs recorded for this incident (it predates the audit chain).</p>
@@ -263,9 +288,28 @@ function IncidentDetail() {
                 ))}
               </ul>
             )}
-          </Card>
+          </Card>}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={assigning}
+        title="Assign this incident"
+        message="Choose who should handle it. They are notified immediately and the assignment is recorded in the activity history and the audit chain."
+        confirmLabel="Assign"
+        onConfirm={() => { const who = assignee; setAssigning(false); move('assigned', { assignee: who }); }}
+        onCancel={() => setAssigning(false)}
+      >
+        <label className="form-label modal__form">
+          Assign to
+          <select className="form-input" value={assignee} onChange={(e) => setAssignee(e.target.value)} disabled={!people}>
+            {!people && <option value={user.id}>Loading team…</option>}
+            {(people || []).map((p) => (
+              <option key={p._id} value={p._id}>{p.name} — {p.role}{p._id === user.id ? ' (me)' : ''} · {p.activeIncidents} active{p.isDemo ? ' · simulated' : ''}</option>
+            ))}
+          </select>
+        </label>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={resolving}

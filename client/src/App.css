@@ -802,3 +802,5 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .tourist-item--stale { opacity: .8; }
 .livemap__panel { max-height: none; }
 .livemap__panel .tourist-list { max-height: 360px; }
+
+.table-export { margin-left: auto; }

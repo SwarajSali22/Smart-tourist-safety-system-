@@ -11,7 +11,7 @@ import Badge from '../../shared/components/ui/Badge.jsx';
 import DataTable from '../../shared/components/ui/DataTable.jsx';
 import ErrorState from '../../shared/components/ui/ErrorState.jsx';
 import { SkeletonRows } from '../../shared/components/ui/Skeleton.jsx';
-import { incidentOverdue } from '../../shared/utils/freshness.js';
+import { downloadServerCsv } from '../../shared/utils/csv.js';
 import { formatDateTime, label, timeAgo } from '../../shared/utils/format.js';
 
 export const SEVERITY_BADGE = { low: 'neutral', medium: 'info', high: 'warning', critical: 'danger' };
@@ -109,6 +109,17 @@ function Incidents() {
     }
   }
 
+  async function exportCsv() {
+    const sp = new URLSearchParams(queryString);
+    sp.delete('page'); sp.delete('limit');
+    try {
+      await downloadServerCsv(`/incidents/export.csv?${sp}`, 'incidents.csv');
+      toast.success('Exported every incident matching the current filters.');
+    } catch (err) {
+      toast.error(`Couldn’t export: ${err.message}`);
+    }
+  }
+
   const rows = data?.incidents || [];
   const filtered = Boolean(q || statusValue || severity || type);
   const clearFilters = () => { setQInput(''); setParams({}, { replace: true }); };
@@ -122,7 +133,7 @@ function Incidents() {
     { key: 'status', header: 'Status', sortKey: 'status', render: (i) => (
       <span className="badge-row">
         <Badge variant={STATUS_BADGE[i.status]}>{label(i.status)}</Badge>
-        {incidentOverdue(i, now) && <span className="badge badge--overdue" title="Sitting in this state longer than the target">Overdue</span>}
+        {i.overdue && <span className="badge badge--overdue" title="Sitting in this state longer than the target">Overdue</span>}
       </span>
     ) },
     { key: 'assignee', header: 'Assigned to', render: (i) => i.assignedAdmin?.name || '—' },
@@ -169,6 +180,7 @@ function Incidents() {
             {error && <ErrorState compact message={`${error} Showing the last data we had.`} onRetry={load} />}
             <DataTable
               manual
+              onExportCsv={exportCsv}
               columns={columns}
               rows={rows}
               toolbar={
