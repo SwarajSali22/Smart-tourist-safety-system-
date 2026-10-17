@@ -47,7 +47,16 @@ async function connect() {
 }
 
 async function disconnect() {
-  try { await mongoose.connection.dropDatabase(); } catch { /* ignore */ }
+  try {
+    await mongoose.connection.dropDatabase();
+  } catch {
+    // Some Atlas users may not drop databases; drop the collections instead so the
+    // cluster's collection quota isn't exhausted by leftover test databases.
+    try {
+      const db = mongoose.connection.db;
+      for (const c of await db.listCollections().toArray()) await db.dropCollection(c.name);
+    } catch { /* ignore */ }
+  }
   await mongoose.disconnect();
 }
 

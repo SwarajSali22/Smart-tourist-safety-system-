@@ -149,12 +149,20 @@ async function verifyProof(proofId) {
       dataHash: proof.dataHash,
     }) === proof.chainHash;
 
+  // The link to the preceding proof must still point at that proof's current hash.
+  const seq = proof.chainRef.sequenceNo;
+  let linkIntact = true;
+  if (seq > 1 || proof.chainRef.previousHash) {
+    const prev = await AuditProof.findOne({ ...partition(proof.isDemo), 'chainRef.sequenceNo': seq - 1 }).select('chainHash').lean();
+    linkIntact = Boolean(prev) && prev.chainHash === proof.chainRef.previousHash;
+  }
+
   const source = await MODELS[proof.eventModel].findById(proof.eventRef).lean();
   const sourceFound = Boolean(source);
   const sourceMatches =
     sourceFound && sha256(canonicalize(PAYLOAD[proof.eventType](source))) === proof.dataHash;
 
-  const verified = payloadIntact && chainIntact && sourceMatches;
+  const verified = payloadIntact && chainIntact && linkIntact && sourceMatches;
   // verified — everything matches
   // missing  — the source record no longer exists in the database
   // modified — the source record, the stored payload or the chain link was changed after it was hashed
@@ -166,17 +174,19 @@ async function verifyProof(proofId) {
     eventType: proof.eventType,
     sequenceNo: proof.chainRef.sequenceNo,
     status,
-    checks: { payloadIntact, chainIntact, sourceFound, sourceMatches },
+    checks: { payloadIntact, chainIntact, linkIntact, sourceFound, sourceMatches },
     dataHash: proof.dataHash,
     checkedAt: new Date(),
   };
 }
 
 async function _verifyPartition(isDemo) {
-  const proofs = await AuditProof.find(partition(isDemo)).sort({ 'chainRef.sequenceNo': 1 }).limit(10000).lean();
   let prev = null;
   let expectedSeq = 1;
-  for (const p of proofs) {
+  let length = 0;
+  // Stream the whole partition — a silent row cap would let tampering past it go unnoticed.
+  for await (const p of AuditProof.find(partition(isDemo)).sort({ 'chainRef.sequenceNo': 1 }).lean().cursor()) {
+    length += 1;
     const linkOk = p.chainRef.previousHash === (prev ? prev.chainHash : null);
     const seqOk = p.chainRef.sequenceNo === expectedSeq;
     const hashOk =
@@ -189,15 +199,16 @@ async function _verifyPartition(isDemo) {
     if (!linkOk || !seqOk || !hashOk) {
       return {
         valid: false,
-        length: proofs.length,
+        length,
         brokenAtSequence: p.chainRef.sequenceNo,
         reason: !seqOk ? 'sequence gap' : !linkOk ? 'broken link' : 'hash mismatch',
+        headHash: null,
       };
     }
     prev = p;
     expectedSeq += 1;
   }
-  return { valid: true, length: proofs.length, headHash: prev ? prev.chainHash : null };
+  return { valid: true, length, headHash: prev ? prev.chainHash : null };
 }
 
 /**

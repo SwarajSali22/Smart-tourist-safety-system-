@@ -77,6 +77,30 @@ describe('audit hash chain (a tamper-evident DATABASE chain — not a public blo
     assert.equal((await verifyChain()).valid, true);
   });
 
+  test('MODIFIED: a rewired link to the previous proof is detected per record and in the whole chain', async () => {
+    const proof = proofs[1];
+    const original = proof.chainRef.previousHash;
+    await models.AuditProof.updateOne({ _id: proof._id }, { 'chainRef.previousHash': 'a'.repeat(64) });
+    const bad = await verify(proof._id);
+    assert.equal(bad.status, 'modified');
+    assert.equal(bad.checks.chainIntact, false);
+    const chain = await verifyChain();
+    assert.equal(chain.valid, false);
+    assert.equal(chain.brokenAtSequence, 2);
+    await models.AuditProof.updateOne({ _id: proof._id }, { 'chainRef.previousHash': original });
+    assert.equal((await verifyChain()).valid, true);
+  });
+
+  test('MODIFIED: a predecessor rewritten with a self-consistent hash breaks the link of the next proof', async () => {
+    const [first, second] = proofs;
+    await models.AuditProof.updateOne({ _id: first._id }, { chainHash: 'b'.repeat(64) });
+    const bad = await verify(second._id);
+    assert.equal(bad.status, 'modified');
+    assert.equal(bad.checks.linkIntact, false);
+    await models.AuditProof.updateOne({ _id: first._id }, { chainHash: first.chainHash });
+    assert.equal((await verify(second._id)).checks.linkIntact, true);
+  });
+
   test('chain: deleting a proof in the middle is detected (sequence gap)', async () => {
     const all = await models.AuditProof.find().sort({ 'chainRef.sequenceNo': 1 }).lean();
     const victim = all[1];

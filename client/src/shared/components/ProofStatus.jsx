@@ -27,7 +27,8 @@ export function ProofBadge({ result }) {
 
 const CHECK_LABELS = {
   payloadIntact: 'Stored payload matches its hash',
-  chainIntact: 'Chain link is intact',
+  chainIntact: 'Chain hash matches its contents',
+  linkIntact: 'Link to the previous proof is intact',
   sourceFound: 'Source record still exists',
   sourceMatches: 'Source record unchanged since it was hashed',
 };

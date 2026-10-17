@@ -57,7 +57,7 @@ async function triggerSos({ tourist, device, location, source, io }) {
     sosEvent.auditProof = sosProof._id;
     await sosEvent.save();
   }
-  notifyEmergencyContacts({ touristId: tourist, sosEvent });
+  notifyEmergencyContacts({ touristId: tourist, sosEvent, incident }).catch(() => {});
 
   // Phase 11: entering emergency mode is a property of any SOS trigger, not
   // just the button-press telemetry tick (which sets it inline itself) —
