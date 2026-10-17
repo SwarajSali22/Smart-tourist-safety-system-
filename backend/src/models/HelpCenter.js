@@ -7,7 +7,7 @@ const mongoose = require('mongoose');
 const helpCenterSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
-    type: { type: String, enum: ['hospital', 'police', 'fire', 'embassy', 'pharmacy', 'other'], default: 'other' },
+    type: { type: String, enum: ['hospital', 'police', 'fire', 'embassy', 'pharmacy', 'emergency', 'other'], default: 'other' },
     phone: { type: String, trim: true, default: null },
     address: { type: String, trim: true, default: null },
     location: {

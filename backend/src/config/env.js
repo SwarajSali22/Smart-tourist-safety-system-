@@ -22,6 +22,13 @@ const env = {
   bcryptRounds: Number(process.env.BCRYPT_ROUNDS) || 12,
   safetyCheckIntervalMinutes: Number(process.env.SAFETY_CHECK_INTERVAL_MINUTES) || 25,
   safetyCheckResponseWindowMinutes: Number(process.env.SAFETY_CHECK_RESPONSE_WINDOW_MINUTES) || 5,
+  // Place search / reverse geocoding (admin Help Centers form). Defaults to the public OpenStreetMap
+  // Nominatim service, whose policy requires an identifying User-Agent — set GEOCODE_USER_AGENT.
+  geocode: {
+    baseUrl: (process.env.GEOCODE_BASE_URL || 'https://nominatim.openstreetmap.org').replace(/\/+$/, ''),
+    userAgent: process.env.GEOCODE_USER_AGENT || '',
+    email: process.env.GEOCODE_EMAIL || '',
+  },
   twilio: {
     accountSid: process.env.TWILIO_ACCOUNT_SID || '',
     authToken: process.env.TWILIO_AUTH_TOKEN || '',

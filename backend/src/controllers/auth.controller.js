@@ -50,7 +50,7 @@ async function register(req, res, next) {
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
 async function login(req, res, next) {
   try {
-    const { email, password } = req.body;
+    const { email, password, portal } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ success: false, message: 'email and password are required' });
@@ -64,6 +64,14 @@ async function login(req, res, next) {
     const valid = await verifyPassword(password, user.passwordHash);
     if (!valid) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    // Right password, wrong door: refuse before any token is issued.
+    if (portal === 'staff' && user.role === 'tourist') {
+      return res.status(403).json({ success: false, message: 'This account is not an administrator or responder account. Use the tourist login.' });
+    }
+    if (portal === 'tourist' && user.role !== 'tourist') {
+      return res.status(403).json({ success: false, message: 'This is a staff account. Use the administrator login.' });
     }
 
     const accessToken = issueAccessToken(user);

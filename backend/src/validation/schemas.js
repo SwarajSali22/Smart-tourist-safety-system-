@@ -21,6 +21,8 @@ const registerSchema = z.object({
 const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email('must be a valid email').max(200),
   password: z.string().min(1, 'is required').max(128),
+  // Which login panel was used; the server enforces it so a tourist can't sign in through the staff panel.
+  portal: z.enum(['staff', 'tourist']).optional(),
 });
 const refreshSchema = z.object({ refreshToken: z.string().min(10).max(2000) });
 
@@ -29,6 +31,20 @@ const responderCreateSchema = z.object({
   email: z.string().trim().toLowerCase().email('must be a valid email').max(200),
   password: z.string().min(8, 'must be at least 8 characters').max(128),
   phone: phone.optional().or(z.literal('')),
+});
+
+const responderUpdateSchema = z.object({
+  name: trimmed(1, 100, 'name').optional(),
+  phone: phone.nullable().optional().or(z.literal('')),
+  isActive: z.boolean().optional(),
+});
+const geocodeSearchQuery = z.object({
+  q: z.string().trim().min(2).max(120),
+  type: z.enum(['hospital', 'police', 'fire', 'embassy', 'pharmacy', 'emergency', 'other']).optional(),
+});
+const geocodeReverseQuery = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180),
 });
 
 // ── tourists ──
@@ -124,7 +140,7 @@ const incidentListQuery = z.object({
 });
 
 // ── help centers ──
-const helpType = z.enum(['hospital', 'police', 'fire', 'embassy', 'pharmacy', 'other']);
+const helpType = z.enum(['hospital', 'police', 'fire', 'embassy', 'pharmacy', 'emergency', 'other']);
 const helpCenterCreateSchema = z.object({
   name: trimmed(1, 120, 'name'),
   type: helpType.default('other'),
@@ -157,7 +173,7 @@ const notificationListQuery = z.object({
 
 module.exports = {
   objectId, idParams,
-  registerSchema, loginSchema, refreshSchema, responderCreateSchema,
+  registerSchema, loginSchema, refreshSchema, responderCreateSchema, responderUpdateSchema, geocodeSearchQuery, geocodeReverseQuery,
   locationSchema, contactsSchema, itinerarySchema,
   zoneCreateSchema, zoneUpdateSchema,
   deviceRegisterSchema, telemetrySchema,

@@ -5,8 +5,10 @@ const { ACTIVE_STATUSES } = require('../services/incidents/lifecycle');
 // ── GET /api/users/assignable  (admin) — who an incident can be assigned to ──
 async function listAssignable(req, res, next) {
   try {
-    const users = await User.find({ role: { $in: ['admin', 'responder'] }, isActive: { $ne: false } })
-      .select('name email role isDemo')
+    // ?all=1 (Team page) also lists deactivated accounts; assignment pickers only want active ones.
+    const activeOnly = req.query.all !== '1';
+    const users = await User.find({ role: { $in: ['admin', 'responder'] }, ...(activeOnly ? { isActive: { $ne: false } } : {}) })
+      .select('name email phone role isDemo isActive createdAt')
       .sort({ role: 1, name: 1 })
       .lean();
     const load = await Incident.aggregate([
@@ -32,4 +34,25 @@ async function createResponder(req, res, next) {
   }
 }
 
-module.exports = { listAssignable, createResponder };
+// ── PATCH /api/users/:id  (admin) — edit or deactivate a RESPONDER (admins are never editable here) ──
+async function updateResponder(req, res, next) {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    if (user.role !== 'responder') return res.status(403).json({ success: false, message: 'Only responder accounts can be changed here' });
+    const { name, phone, isActive } = req.body;
+    if (isActive === false && user.isActive !== false) {
+      const open = await Incident.countDocuments({ assignedAdmin: user._id, status: { $in: ACTIVE_STATUSES } });
+      if (open) return res.status(409).json({ success: false, message: `Reassign their ${open} active incident${open === 1 ? '' : 's'} before deactivating this responder` });
+    }
+    if (name !== undefined) user.name = name;
+    if (phone !== undefined) user.phone = phone || null;
+    if (isActive !== undefined) user.isActive = isActive;
+    await user.save();
+    return res.json({ success: true, user: { id: user._id, name: user.name, email: user.email, phone: user.phone, role: user.role, isActive: user.isActive } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { listAssignable, createResponder, updateResponder };

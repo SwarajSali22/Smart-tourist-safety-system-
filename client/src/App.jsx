@@ -33,6 +33,7 @@ import TouristSOS        from './features/tourist/TouristSOS.jsx';
 import TouristChecks     from './features/tourist/TouristChecks.jsx';
 
 import './App.css';
+import './styles/screens.css';
 
 function App() {
   return (

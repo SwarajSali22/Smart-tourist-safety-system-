@@ -15,6 +15,7 @@ const statsRoutes = require('./stats.routes');
 const notificationRoutes = require('./notification.routes');
 const userRoutes = require('./user.routes');
 const helpCenterRoutes = require('./helpCenter.routes');
+const geocodeRoutes = require('./geocode.routes');
 
 const router = express.Router();
 
@@ -34,5 +35,6 @@ router.use('/stats', statsRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/users', userRoutes);
 router.use('/help-centers', helpCenterRoutes);
+router.use('/geocode', geocodeRoutes);
 
 module.exports = router;
