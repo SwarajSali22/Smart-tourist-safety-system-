@@ -126,7 +126,7 @@ function Team() {
   }), [users]);
 
   return (
-    <div className="page-stack">
+    <div className="app-page page-stack">
       <div className="team-head">
         <div>
           <h1 className="page-title">Team</h1>

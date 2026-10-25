@@ -1,5 +1,5 @@
 import {
-  BarChart3, ClipboardCheck, ClipboardList, Home, LayoutDashboard, LifeBuoy, Link2, MapPin, Radar, Shapes, Siren, User, Users, UsersRound, Watch,
+  Activity, BarChart3, Sparkles, CalendarClock, ClipboardCheck, ClipboardList, Home, LayoutDashboard, LifeBuoy, Link2, MapPin, Radar, Shapes, Siren, User, Users, UsersRound, Watch,
 } from 'lucide-react';
 
 /**
@@ -16,10 +16,13 @@ export const NAV = {
     { to: '/admin/tourists',   label: 'Tourists',     icon: Users,           mobile: true },
     { to: '/admin/zones',      label: 'Zones',        icon: Shapes },
     { to: '/admin/devices',    label: 'Devices',      icon: Watch },
+    { to: '/admin/trips',      label: 'Trips',        icon: CalendarClock },
     { to: '/admin/analytics',  label: 'Analytics',    icon: BarChart3 },
     { to: '/admin/blockchain', label: 'Audit proofs', icon: Link2 },
     { to: '/admin/help-centers', label: 'Help centers', icon: LifeBuoy },
     { to: '/admin/team',       label: 'Team',         icon: UsersRound },
+    { to: '/admin/health',     label: 'System health', icon: Activity },
+    { to: '/admin/copilot',    label: 'AI Copilot',   icon: Sparkles },
   ],
   // Responders see only the incidents assigned to them (the server enforces this).
   responder: [
@@ -27,11 +30,13 @@ export const NAV = {
   ],
   // Order matters: SOS sits in the centre slot of the 5-item mobile tab bar.
   tourist: [
-    { to: '/tourist',          label: 'Home',      labelKey: 'nav.home',    icon: Home, end: true },
-    { to: '/tourist/map',      label: 'Map',       labelKey: 'nav.map',     icon: MapPin },
-    { to: '/tourist/sos',      label: 'SOS',       labelKey: 'nav.sos',     icon: Siren, sos: true },
-    { to: '/tourist/checks',   label: 'Check-ins', labelKey: 'nav.checks',  icon: ClipboardCheck },
-    { to: '/tourist/profile',  label: 'Profile',   labelKey: 'nav.profile', icon: User },
+    { to: '/tourist',          label: 'Home',      labelKey: 'nav.home',    icon: Home, end: true, mobile: true },
+    { to: '/tourist/map',      label: 'Map',       labelKey: 'nav.map',     icon: MapPin, mobile: true },
+    { to: '/tourist/sos',      label: 'SOS',       labelKey: 'nav.sos',     icon: Siren, sos: true, mobile: true },
+    { to: '/tourist/checks',   label: 'Check-ins', labelKey: 'nav.checks',  icon: ClipboardCheck, mobile: true },
+    { to: '/tourist/trips',    label: 'Trips',     icon: CalendarClock },
+    { to: '/tourist/copilot',  label: 'AI Copilot', labelKey: 'nav.copilot', icon: Sparkles },
+    { to: '/tourist/profile',  label: 'Profile',   labelKey: 'nav.profile', icon: User, mobile: true },
   ],
 };
 

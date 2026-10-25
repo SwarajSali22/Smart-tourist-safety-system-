@@ -18,6 +18,7 @@ async function createSos(req, res, next) {
       device: device._id,
       location: device.lastLocation,
       source: 'app',
+      clientTriggeredAt: req.body.clientTriggeredAt && req.body.clientTriggeredAt <= new Date() ? req.body.clientTriggeredAt : null,
       io: req.app.get('io'),
     });
 
@@ -56,11 +57,17 @@ async function listSos(req, res, next) {
     const filter = {};
     if (req.query.status) filter.status = req.query.status;
 
-    const events = await SOSEvent.find(filter)
-      .populate('tourist', 'name email isDemo')
-      .sort({ createdAt: -1 })
-      .limit(100)
-      .lean();
+    const populateSort = (q) => q.populate('tourist', 'name email isDemo').sort({ createdAt: -1 });
+    const events = await populateSort(SOSEvent.find(filter)).limit(100).lean();
+
+    // The dashboard counts active SOS from this list, so every still-open SOS must be in it even when
+    // more than 100 newer (resolved) events exist — otherwise the count silently drops old open ones.
+    if (!req.query.status) {
+      const have = new Set(events.map((e) => String(e._id)));
+      const open = await populateSort(SOSEvent.find({ status: { $in: ['active', 'acknowledged'] }, _id: { $nin: [...have] } })).lean();
+      events.push(...open);
+      events.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    }
 
     return res.json({ success: true, events });
   } catch (err) {

@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const { Incident, SOSEvent, Device, User, Notification } = require('../models');
-const { transitionIncident, addIncidentNote, isOverdue, ALLOWED, ACTIVE_STATUSES } = require('../services/incidents/lifecycle');
+const { transitionIncident, addIncidentNote, reassignIncident, addEvidence, setPriority, isOverdue, ALLOWED, ACTIVE_STATUSES } = require('../services/incidents/lifecycle');
 const { isConfigured: smsConfigured } = require('../services/notifications/sms');
 
 const SEVERITY_ORDER = ['low', 'medium', 'high', 'critical'];
@@ -21,11 +21,13 @@ async function guardResponder(req, res, id, to) {
 
 /** Builds the Mongo filter from the (zod-validated) query — shared by the list and the CSV export. */
 async function buildMatch(req) {
-  const { status, severity, type, active, tourist, assignee, q, from, to } = req.query;
+  const { status, severity, priority, escalated, type, active, tourist, assignee, q, from, to } = req.query;
   const match = {};
   if (status.length) match.status = { $in: status };
   else if (active) match.status = { $in: ACTIVE_STATUSES };
   if (severity.length) match.severity = { $in: severity };
+  if (priority.length) match.priority = { $in: priority };
+  if (escalated) match.escalatedAt = { $ne: null };
   if (type.length) match.type = { $in: type };
   if (tourist) match.tourist = new mongoose.Types.ObjectId(tourist);
   // a responder only ever sees their own assignments
@@ -131,6 +133,16 @@ async function exportIncidents(req, res, next) {
   }
 }
 
+/** Response / resolution times, always measured from the incident's original creation time. */
+function timingOf(incident, sosEvent) {
+  const created = new Date(incident.createdAt).getTime();
+  const ackEntry = (incident.timeline || []).find((t) => t.metadata?.to === 'in_progress');
+  const ackAt = ackEntry?.at || sosEvent?.acknowledgedAt || null;
+  const doneAt = incident.resolvedAt || null;
+  const mins = (t) => (t ? Math.round(((new Date(t).getTime() - created) / 60000) * 10) / 10 : null);
+  return { acknowledgedAt: ackAt, responseMinutes: mins(ackAt), resolvedAt: doneAt, resolutionMinutes: mins(doneAt) };
+}
+
 // ── GET /api/incidents/:id  (admin, or the owning tourist) ───────────────────
 async function getIncident(req, res, next) {
   try {
@@ -177,6 +189,7 @@ async function getIncident(req, res, next) {
     return res.json({
       success: true,
       incident,
+      metrics: timingOf(incident, sosEvent),
       sosEvent,
       sms,
       device,
@@ -191,9 +204,9 @@ async function getIncident(req, res, next) {
 // ── PATCH /api/incidents/:id/status  (admin) — the one validated transition endpoint ──
 async function setStatus(req, res, next) {
   try {
-    const { status, note, assignee } = req.body;
+    const { status, note, assignee, expectedStatus } = req.body;
     if (!(await guardResponder(req, res, req.params.id, status))) return undefined;
-    const { incident, sosEvent, changed } = await transitionIncident({ id: req.params.id, to: status, actor: actorOf(req), note, assignee });
+    const { incident, sosEvent, changed } = await transitionIncident({ id: req.params.id, to: status, actor: actorOf(req), note, assignee, expectedStatus });
     return res.json({ success: true, incident, sosEvent: sosEvent || null, changed });
   } catch (err) {
     next(err);
@@ -232,4 +245,84 @@ async function addNote(req, res, next) {
   }
 }
 
-module.exports = { listIncidents, exportIncidents, getIncident, setStatus, acknowledgeIncident, resolveIncident, addNote };
+// ── PATCH /api/incidents/:id/assign  (admin) — assign or reassign to an active admin/responder ──
+async function assignIncident(req, res, next) {
+  try {
+    const inc = await Incident.findById(req.params.id).select('status').lean();
+    if (!inc) return res.status(404).json({ success: false, message: 'Incident not found' });
+    if (['assigned', 'en_route'].includes(inc.status)) {
+      const incident = await reassignIncident({ id: req.params.id, actor: actorOf(req), assignee: req.body.assignee, note: req.body.note });
+      return res.json({ success: true, incident, reassigned: true });
+    }
+    const { incident } = await transitionIncident({ id: req.params.id, to: 'assigned', actor: actorOf(req), assignee: req.body.assignee, note: req.body.note });
+    return res.json({ success: true, incident, reassigned: false });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── PATCH /api/incidents/:id/priority  (admin) ───────────────────────────────
+async function changePriority(req, res, next) {
+  try {
+    const incident = await setPriority({ id: req.params.id, actor: actorOf(req), priority: req.body.priority });
+    return res.json({ success: true, incident });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── POST /api/incidents/:id/evidence  (admin, assigned responder) ────────────
+async function addIncidentEvidence(req, res, next) {
+  try {
+    if (!(await guardResponder(req, res, req.params.id))) return undefined;
+    const incident = await addEvidence({ id: req.params.id, actor: actorOf(req), ...req.body });
+    return res.status(201).json({ success: true, incident });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * ── GET /api/incidents/:id/handover  (admin, or the responder assigned to it) ──
+ * A read-only summary built ONLY from what is already recorded (timeline, device, SOS) so whoever
+ * takes over sees: where the case stands, who has held it and when, what was done, the latest notes
+ * and the last known location. Nothing here is written or invented.
+ */
+async function getHandover(req, res, next) {
+  try {
+    const incident = await Incident.findById(req.params.id)
+      .populate('tourist', 'name phone isDemo').populate('assignedAdmin', 'name role').lean();
+    if (!incident) return res.status(404).json({ success: false, message: 'Incident not found' });
+    if (req.user.role === 'responder' && String(incident.assignedAdmin?._id) !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'This incident is not assigned to you' });
+    }
+    const timeline = incident.timeline || [];
+    const meta = (t) => t.metadata || {};
+    // Chronological record of who held the case: every assignment / reassignment entry, in order.
+    const assignments = timeline
+      .filter((t) => meta(t).to === 'assigned' || /^Reassigned to /.test(t.action))
+      .map((t) => ({ at: t.at, by: t.actorLabel, assignee: meta(t).assigneeName || null, note: meta(t).note || null }));
+    const notes = timeline.filter((t) => t.action === 'Note').slice(-5).map((t) => ({ at: t.at, by: t.actorLabel, note: meta(t).note }));
+    const actions = timeline.filter((t) => t.action !== 'Note').slice(-8).map((t) => ({ at: t.at, by: t.actorLabel, action: t.action }));
+    const device = await Device.findOne({ tourist: incident.tourist?._id }).select('lastLocation lastSeen battery isSimulated').lean();
+    const sos = incident.sourceRef?.refModel === 'SOSEvent' ? await SOSEvent.findById(incident.sourceRef.refId).select('location source createdAt').lean() : null;
+    return res.json({
+      success: true,
+      handover: {
+        incident: { _id: incident._id, type: incident.type, severity: incident.severity, priority: incident.priority, status: incident.status, createdAt: incident.createdAt, escalatedAt: incident.escalatedAt },
+        tourist: { name: incident.tourist?.name, phone: incident.tourist?.phone || null, simulated: Boolean(incident.tourist?.isDemo) },
+        currentAssignee: incident.assignedAdmin ? { name: incident.assignedAdmin.name, role: incident.assignedAdmin.role, since: incident.assignedAt } : null,
+        assignments,
+        recentActions: actions,
+        recentNotes: notes,
+        evidenceCount: (incident.evidence || []).length,
+        lastKnownLocation: device?.lastLocation?.lat != null ? { ...device.lastLocation, lastSeen: device.lastSeen, simulated: Boolean(device.isSimulated) } : (sos?.location ? { ...sos.location, lastSeen: sos.createdAt } : null),
+        allowedNext: (ALLOWED[incident.status] || []).filter((st) => req.user.role !== 'responder' || RESPONDER_MOVES.includes(st)),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getHandover, assignIncident, changePriority, addIncidentEvidence, timingOf, buildMatch, listIncidents, exportIncidents, getIncident, setStatus, acknowledgeIncident, resolveIncident, addNote };

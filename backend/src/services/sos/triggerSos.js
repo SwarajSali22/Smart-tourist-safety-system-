@@ -15,7 +15,7 @@ class SosAlreadyActiveError extends Error {
  * SOSEvent, an escalated Incident linked to it, and emits the roadmap's
  * sos:triggered / admin:alert socket events.
  */
-async function triggerSos({ tourist, device, location, source, io }) {
+async function triggerSos({ tourist, device, location, source, io, clientTriggeredAt = null }) {
   const existing = await SOSEvent.findOne({
     tourist,
     status: { $in: ['active', 'acknowledged'] },
@@ -26,7 +26,7 @@ async function triggerSos({ tourist, device, location, source, io }) {
   try {
     // activeKey + the unique sparse index guarantee one active SOS per tourist even
     // when two triggers race past the check above.
-    sosEvent = await SOSEvent.create({ tourist, device, location, source, status: 'active', activeKey: String(tourist) });
+    sosEvent = await SOSEvent.create({ tourist, device, location, source, status: 'active', activeKey: String(tourist), clientTriggeredAt });
   } catch (err) {
     if (err.code === 11000) throw new SosAlreadyActiveError();
     throw err;

@@ -118,14 +118,24 @@ const incidentStatusSchema = z.object({
   status: z.enum(['open', 'in_progress', 'assigned', 'en_route', 'resolved', 'closed']),
   note: z.string().trim().max(1000).optional(),
   assignee: objectId.optional(),
+  expectedStatus: z.enum(['open', 'in_progress', 'assigned', 'en_route', 'resolved', 'closed']).optional(), // the status the screen was showing
 });
 const incidentNoteSchema = z.object({ note: trimmed(1, 1000, 'note') });
 const incidentResolveSchema = z.object({ resolution: z.string().trim().max(1000).optional() });
 const csv = (allowed) => z.string().optional().transform((v) => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : []))
   .refine((arr) => arr.every((x) => allowed.includes(x)), { message: `must be one of: ${allowed.join(', ')}` });
+const incidentAssignSchema = z.object({ assignee: objectId, note: z.string().trim().max(500).optional() });
+const incidentPrioritySchema = z.object({ priority: z.enum(['low', 'normal', 'high', 'urgent']) });
+const incidentEvidenceSchema = z.object({
+  kind: z.enum(['link', 'text']),
+  title: trimmed(1, 140, 'title'),
+  value: z.string().trim().min(1).max(1000),
+}).refine((e) => e.kind !== 'link' || /^https?:\/\/[^\s]+$/i.test(e.value), { message: 'a link must start with http:// or https://', path: ['value'] });
 const incidentListQuery = z.object({
   status: csv(['open', 'in_progress', 'assigned', 'en_route', 'resolved', 'closed']),
   severity: csv(['low', 'medium', 'high', 'critical']),
+  priority: csv(['low', 'normal', 'high', 'urgent']),
+  escalated: z.enum(['1', 'true']).optional(),
   type: csv(['sos', 'geofence_violation', 'no_response', 'risk_escalation', 'other']),
   active: z.enum(['1', 'true']).optional(),
   tourist: objectId.optional(),
@@ -171,13 +181,25 @@ const notificationListQuery = z.object({
   page: z.coerce.number().int().min(1).max(10000).default(1),
 });
 
+// ── AI Copilot ──
+const copilotChatSchema = z.object({
+  messages: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(2000) })).min(1).max(24),
+  lang: z.enum(['en', 'hi', 'mr']).default('en'),
+  location: z.object({
+    lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180),
+    accuracy: z.number().min(0).max(100000).optional(), capturedAt: z.union([z.string(), z.number()]).optional(),
+  }).optional(),
+});
+
 module.exports = {
+  copilotChatSchema,
   objectId, idParams,
   registerSchema, loginSchema, refreshSchema, responderCreateSchema, responderUpdateSchema, geocodeSearchQuery, geocodeReverseQuery,
   locationSchema, contactsSchema, itinerarySchema,
   zoneCreateSchema, zoneUpdateSchema,
   deviceRegisterSchema, telemetrySchema,
   checkRespondSchema, checkTriggerSchema,
+  incidentAssignSchema, incidentPrioritySchema, incidentEvidenceSchema,
   incidentStatusSchema, incidentNoteSchema, incidentResolveSchema, incidentListQuery,
   notificationListQuery,
   helpCenterCreateSchema, helpCenterUpdateSchema, nearbyQuery,

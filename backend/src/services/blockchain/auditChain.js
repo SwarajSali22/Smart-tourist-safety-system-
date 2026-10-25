@@ -72,10 +72,15 @@ const PAYLOAD = {
     sourceRef: { refModel: d.sourceRef?.refModel || null, refId: idOf(d.sourceRef?.refId) },
     createdAt: iso(d.createdAt),
   }),
+  // Uses the first assignment when recorded, so a later reassignment cannot invalidate this proof.
   incident_assigned: (d) => ({
     id: idOf(d),
-    assignedAdmin: idOf(d.assignedAdmin),
-    assignedAt: iso(d.assignedAt),
+    assignedAdmin: idOf(d.firstAssignedAdmin || d.assignedAdmin),
+    assignedAt: iso(d.firstAssignedAt || d.assignedAt),
+  }),
+  incident_escalated: (d) => ({
+    id: idOf(d),
+    escalatedAt: iso(d.escalatedAt),
   }),
   incident_resolved: (d) => ({
     id: idOf(d),

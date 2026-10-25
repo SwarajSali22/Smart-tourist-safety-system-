@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { getHealthDetails } = require('../services/health/healthChecks');
 
 const DB_STATES = ['disconnected', 'connected', 'connecting', 'disconnecting'];
 
@@ -18,4 +19,17 @@ function getHealth(req, res) {
   });
 }
 
-module.exports = { getHealth };
+/**
+ * GET /api/health/details  (admin only)
+ * Component-by-component health for the admin "System health" page. Contains no credentials, keys or
+ * personal data: only statuses, counts, timings and short error reasons.
+ */
+async function getHealthDetailsHandler(req, res, next) {
+  try {
+    res.json({ success: true, ...(await getHealthDetails()) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getHealth, getHealthDetails: getHealthDetailsHandler };

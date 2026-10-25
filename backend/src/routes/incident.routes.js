@@ -3,16 +3,20 @@ const {
   listIncidents,
   exportIncidents,
   getIncident,
+  getHandover,
   setStatus,
   acknowledgeIncident,
   resolveIncident,
   addNote,
+  assignIncident,
+  changePriority,
+  addIncidentEvidence,
 } = require('../controllers/incident.controller');
 const authenticate = require('../middleware/authenticate');
 const authorize = require('../middleware/authorize');
 const validate = require('../middleware/validate');
 const {
-  idParams, incidentListQuery, incidentStatusSchema, incidentNoteSchema, incidentResolveSchema,
+  idParams, incidentAssignSchema, incidentPrioritySchema, incidentEvidenceSchema, incidentListQuery, incidentStatusSchema, incidentNoteSchema, incidentResolveSchema,
 } = require('../validation/schemas');
 
 const router = express.Router();
@@ -20,9 +24,13 @@ const router = express.Router();
 router.get('/',                  authenticate, authorize('admin', 'responder'), validate(incidentListQuery, 'query'), listIncidents);
 router.get('/export.csv',        authenticate, authorize('admin'), validate(incidentListQuery, 'query'), exportIncidents);
 router.get('/:id',               authenticate, validate(idParams, 'params'), getIncident);
+router.get('/:id/handover',      authenticate, authorize('admin', 'responder'), validate(idParams, 'params'), getHandover);
 router.patch('/:id/status',      authenticate, authorize('admin', 'responder'), validate(idParams, 'params'), validate(incidentStatusSchema), setStatus);
 router.patch('/:id/acknowledge', authenticate, authorize('admin'), validate(idParams, 'params'), acknowledgeIncident);
 router.patch('/:id/resolve',     authenticate, authorize('admin'), validate(idParams, 'params'), validate(incidentResolveSchema), resolveIncident);
+router.patch('/:id/assign',      authenticate, authorize('admin'), validate(idParams, 'params'), validate(incidentAssignSchema), assignIncident);
+router.patch('/:id/priority',    authenticate, authorize('admin'), validate(idParams, 'params'), validate(incidentPrioritySchema), changePriority);
+router.post('/:id/evidence',     authenticate, authorize('admin', 'responder'), validate(idParams, 'params'), validate(incidentEvidenceSchema), addIncidentEvidence);
 router.post('/:id/notes',        authenticate, authorize('admin', 'responder'), validate(idParams, 'params'), validate(incidentNoteSchema), addNote);
 
 module.exports = router;

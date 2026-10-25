@@ -804,3 +804,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .livemap__panel .tourist-list { max-height: 360px; }
 
 .table-export { margin-left: auto; }
+
+/* Maps: Leaflet owns every gesture, so the browser must not claim touch panning/zoom or text selection on them. */
+.leaflet-container { touch-action: none; -webkit-user-select: none; user-select: none; }
+.map-container, .picker-map { overscroll-behavior: contain; }

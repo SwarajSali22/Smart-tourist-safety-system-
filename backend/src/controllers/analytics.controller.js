@@ -1,5 +1,8 @@
 const { Incident, SOSEvent, GeofenceEvent, Zone, SafetyCheck } = require('../models');
 const { isOverdue } = require('../services/incidents/lifecycle');
+const { User } = require('../models');
+const { buildReport, ackMinutes, resolveMinutes } = require('../services/analytics/report');
+const { renderReportPdf } = require('../services/analytics/pdf');
 
 const DEFAULT_DAYS = 14;
 const MAX_DAYS = 92;
@@ -135,4 +138,52 @@ async function overview(req, res, next) {
   }
 }
 
-module.exports = { overview, resolveRange, stats };
+// ── GET /api/analytics/report  (admin) — filtered, comparable analytics ───────
+//   ?range=24h|7d|30d|custom  ?from=&to=  ?type=&severity=&status= (comma lists)  ?tourist=  ?lat=&lng=&radiusKm=
+async function report(req, res, next) {
+  try {
+    const data = await buildReport(req.query);
+    delete data._rows;
+    return res.json({ success: true, ...data });
+  } catch (err) { next(err); }
+}
+
+const csvCell = (v) => {
+  let t = v == null ? '' : String(v);
+  if (/^[=+\-@\t\r]/.test(t)) t = `'${t}`;
+  return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+};
+
+// ── GET /api/analytics/report.csv  (admin) — the incidents behind the report, same filters ──
+async function reportCsv(req, res, next) {
+  try {
+    const data = await buildReport(req.query);
+    const tourists = await User.find({ _id: { $in: [...new Set(data._rows.map((r) => String(r.tourist)))] } }).select('name email').lean();
+    const byId = new Map(tourists.map((t) => [String(t._id), t]));
+    const head = ['id', 'tourist', 'type', 'severity', 'priority', 'status', 'created_at', 'acknowledged_min', 'resolved_at', 'resolution_min', 'escalated'];
+    const lines = [head.join(',')];
+    data._rows.forEach((r) => {
+      const a = ackMinutes(r); const m = resolveMinutes(r);
+      lines.push([
+        r._id, byId.get(String(r.tourist))?.name, r.type, r.severity, r.priority, r.status, new Date(r.createdAt).toISOString(),
+        a != null ? Math.round(a * 10) / 10 : '', r.resolvedAt ? new Date(r.resolvedAt).toISOString() : '', m != null ? Math.round(m * 10) / 10 : '', r.escalatedAt ? 'yes' : 'no',
+      ].map(csvCell).join(','));
+    });
+    res.set('Content-Type', 'text/csv; charset=utf-8');
+    res.set('Content-Disposition', 'attachment; filename="incident-report.csv"');
+    return res.send(`\uFEFF${lines.join('\r\n')}\r\n`);
+  } catch (err) { next(err); }
+}
+
+// ── GET /api/analytics/report.pdf  (admin) ───────────────────────────────────
+async function reportPdf(req, res, next) {
+  try {
+    const data = await buildReport(req.query);
+    const me = await User.findById(req.user.id).select('name').lean();
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', 'attachment; filename="sts-analytics-report.pdf"');
+    renderReportPdf(data, res, { generatedBy: me?.name });
+  } catch (err) { next(err); }
+}
+
+module.exports = { overview, report, reportCsv, reportPdf, resolveRange, stats };

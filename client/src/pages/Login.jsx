@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Eye, EyeOff, ShieldCheck, UserRound, Loader2 } from 'lucide-react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import Spinner from '../shared/components/ui/Spinner.jsx';
 import { useAuth } from '../shared/auth/AuthContext.jsx';
 import { ThemeToggle } from '../shared/theme/ThemeContext.jsx';
 import { ROLE_HOME } from '../shared/navConfig.js';
@@ -153,13 +154,18 @@ function TouristPanel({ onDone, initialMode }) {
 
 function Login({ initialMode = 'login' }) {
   const navigate = useNavigate();
+  const { user, loading } = useAuth();
   const from = useLocation().state?.from?.pathname;
-  const done = (user) => navigate(from || ROLE_HOME[user.role], { replace: true });
+  const done = (u) => navigate(from || ROLE_HOME[u.role], { replace: true });
+
+  // Already signed in (e.g. opening "/" with a live session) — go straight to the right dashboard.
+  if (loading) return <Spinner fullPage />;
+  if (user) return <Navigate to={from || ROLE_HOME[user.role] || '/'} replace />;
 
   return (
     <main className="auth-page auth-page--dual" id="main">
       <div className="auth-page__tools"><ThemeToggle /></div>
-      <div className="login-wrap">
+      <div className="login-wrap login-wrap--anim">
         <Link to="/" className="auth-card__brand login-wrap__brand">
           <span className="app-brand__logo"><ShieldCheck size={18} aria-hidden="true" /></span>
           <span>Smart Tourist Safety</span>

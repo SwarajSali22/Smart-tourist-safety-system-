@@ -6,6 +6,7 @@ const {
   issueRefreshToken,
   verifyRefreshToken,
 } = require('../services/auth.service');
+const { logActivity } = require('../services/activity/logActivity');
 
 // ── POST /api/auth/register ───────────────────────────────────────────────────
 async function register(req, res, next) {
@@ -58,15 +59,20 @@ async function login(req, res, next) {
 
     const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (!user || !user.isActive) {
+      await logActivity({ req, action: 'auth.login', outcome: 'failure', summary: 'Sign-in refused (unknown or inactive account)', metadata: { email: String(email).toLowerCase().trim().slice(0, 120) } });
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
     const valid = await verifyPassword(password, user.passwordHash);
     if (!valid) {
+      await logActivity({ req, actor: user._id, role: user.role, action: 'auth.login', outcome: 'failure', summary: 'Wrong password' });
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
     // Right password, wrong door: refuse before any token is issued.
+    if ((portal === 'staff' && user.role === 'tourist') || (portal === 'tourist' && user.role !== 'tourist')) {
+      await logActivity({ req, actor: user._id, role: user.role, action: 'auth.login', outcome: 'denied', summary: `Signed in on the wrong portal (${portal})` });
+    }
     if (portal === 'staff' && user.role === 'tourist') {
       return res.status(403).json({ success: false, message: 'This account is not an administrator or responder account. Use the tourist login.' });
     }
@@ -76,6 +82,7 @@ async function login(req, res, next) {
 
     const accessToken = issueAccessToken(user);
     const refreshToken = issueRefreshToken(user);
+    if (user.role !== 'tourist') await logActivity({ req, actor: user._id, role: user.role, action: 'auth.login', summary: 'Staff sign-in' });
 
     return res.json({
       success: true,

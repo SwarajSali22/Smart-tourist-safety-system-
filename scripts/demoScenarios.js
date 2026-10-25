@@ -17,8 +17,10 @@
  *           --base <url>       API base, default http://localhost:5000/api
  *           --app <url>        front-end URL used in the printed links
  *
+ *           --outage-seconds N (network-outage) how long the device stays unreachable, default 4
+ *
  * Scenarios: normal-walk, restricted-zone, danger-zone, sos-button, silent-device,
- *            missed-checkin, full-lifecycle
+ *            missed-checkin, full-lifecycle, multi-sos, network-outage, responder-handover
  */
 const c = require('./lib/demoCommon');
 
@@ -51,6 +53,19 @@ async function ensureZones(adminToken) {
     await models.Zone.updateOne({ _id: r.json.zone._id }, { isDemo: true });
     log(`created zone “${z.name}”`);
   }
+}
+
+/** A simulated (isDemo) responder account; password regenerated each run. Returns { id, name, token }. */
+async function ensureResponder(name, email) {
+  const password = c.randomPassword();
+  const passwordHash = await c.hashPassword(password);
+  let user = await models.User.findOne({ email });
+  if (user && !user.isDemo) throw new Error(`${email} exists and is not a demo user - refusing to touch it.`);
+  if (!user) user = await models.User.create({ name, email, passwordHash, role: 'responder', isDemo: true });
+  else await models.User.updateOne({ _id: user._id }, { passwordHash });
+  const login = await api('POST', '/auth/login', { body: { email, password } });
+  if (!login.ok) throw new Error(`Demo responder login failed (${login.status}): ${login.json?.message}`);
+  return { id: String(user._id), name, token: login.json.accessToken };
 }
 
 /** A fresh simulated tourist + simulated wristband, created through the public/admin APIs. */
@@ -221,6 +236,91 @@ const SCENARIOS = {
       return {
         expect: ['The incident page shows the full activity history with every transition.', 'Audit proofs exist for the SOS, the assignment and the resolution — verify them on the incident page.', 'The tourist received a notification at each step.'],
         links: [link(`/admin/incidents/${id}`), link('/admin/blockchain')],
+      };
+    },
+  },
+
+  'multi-sos': {
+    about: 'Three simulated tourists enter the danger zone at the same time -> three separate SOS incidents (one each, none merged).',
+    async run({ t, admin }) {
+      const r = ZONE.river.center;
+      const others = [await newTourist('multi-sos-b', admin.token), await newTourist('multi-sos-c', admin.token)];
+      const all = [t, ...others];
+      // all three walk together; each ping round is sent concurrently
+      const path = [c.START, ...c.route(c.START, r, 8), r, r];
+      for (const p of path) { await Promise.all(all.map((x) => ping(x, p))); await sleep(STEP_MS); }
+      const incidents = [];
+      for (const x of all) {
+        const inc = await waitFor(() => activeIncident(x));
+        if (!inc) throw new Error(`No SOS incident appeared for ${x.name}.`);
+        incidents.push(inc);
+      }
+      const unique = new Set(incidents.map((i) => String(i._id))).size;
+      log(`${unique} separate SOS incidents raised for ${all.length} tourists`);
+      if (unique !== all.length) throw new Error('Expected one incident per tourist.');
+      return {
+        expect: ['The Active SOS card shows 3 and the needs-attention list has 3 rows (one per tourist).', 'Each incident is independent: acknowledge or resolve one and the others stay open.'],
+        links: [link('/admin/incidents?type=sos&active=1')],
+      };
+    },
+  },
+
+  'network-outage': {
+    about: 'A device loses connectivity, buffers its positions, then reconnects and uploads them with their ORIGINAL timestamps.',
+    async run({ t }) {
+      const seconds = Number(ARGS['outage-seconds']) || 4;
+      await walk(t, [c.START, ...c.route(c.START, [28.6139, 77.2135], 6)], { label: 'walking, signal still good' });
+      // Outage: positions are produced on the device but cannot be sent. The data is aged by backdating
+      // lastSeen (same simulation shortcut as silent-device) so the UI shows it as no longer live.
+      await models.Device.updateOne({ deviceId: t.deviceId }, { lastSeen: new Date(Date.now() - 20 * 60 * 1000) });
+      log(`NETWORK DOWN for ${seconds}s - the device keeps a local buffer; the map shows it Offline, never as live`);
+      const buffered = c.route([28.6139, 77.2135], [28.6142, 77.2148], 4).map((pt, i) => ({ pt, at: new Date(Date.now() - (4 - i) * 15000).toISOString() }));
+      await sleep(seconds * 1000);
+      log('NETWORK RESTORED - uploading the buffered positions in order, each with its original timestamp');
+      for (const b of buffered) { await ping(t, b.pt, { timestamp: b.at }); await sleep(Math.min(STEP_MS, 300)); }
+      const dev = await models.Device.findOne({ deviceId: t.deviceId }).lean();
+      const live = Date.now() - new Date(dev.lastSeen).getTime() < 2 * 60 * 1000;
+      if (!live) throw new Error('Device did not return to live after reconnecting.');
+      const pings = await models.LocationPing.countDocuments({ tourist: t.id });
+      log(`recovered: device is Live again; ${pings} location pings stored`);
+      return {
+        expect: ['During the outage the marker is grey/Offline; after recovery it is Live again.', 'The trail contains the buffered points in their original time order.', 'No alert is raised just because the network dropped.'],
+        links: [link('/admin/map?tourist=' + t.id), link('/admin/devices')],
+      };
+    },
+  },
+
+  'responder-handover': {
+    about: 'SOS -> admin assigns responder A -> A adds a note and goes en route -> admin hands over to responder B -> B resolves. Shows shared notes and the handover summary.',
+    async run({ t, admin }) {
+      const a = await ensureResponder('Demo Responder A', 'demo-responder-a@sts.demo');
+      const b = await ensureResponder('Demo Responder B', 'demo-responder-b@sts.demo');
+      const r = ZONE.river.center;
+      await walk(t, [c.START, ...c.route(c.START, r, 8), r, r], { label: 'walking into the danger zone' });
+      const inc = await waitFor(() => activeIncident(t));
+      if (!inc) throw new Error('No SOS incident appeared.');
+      const id = String(inc._id);
+      const call = async (who, method, path, body, what) => {
+        const res = await api(method, `/incidents/${id}${path}`, { token: who.token, body });
+        if (!res.ok) throw new Error(`${what} failed (${res.status}): ${res.json?.message}`);
+        log(what);
+        await sleep(Math.max(STEP_MS, 500));
+        return res;
+      };
+      await call(admin, 'PATCH', '/status', { status: 'in_progress', expectedStatus: 'open' }, 'admin acknowledged');
+      await call(admin, 'PATCH', '/assign', { assignee: a.id }, `admin assigned ${a.name}`);
+      await call(a, 'POST', '/notes', { note: 'Heading to the riverbank, ETA 10 min (simulated)' }, `${a.name} added a note`);
+      await call(a, 'PATCH', '/status', { status: 'en_route' }, `${a.name} marked en route`);
+      await call(admin, 'PATCH', '/assign', { assignee: b.id, note: 'Shift change - A is off duty' }, `admin handed over to ${b.name}`);
+      const refused = await api('GET', `/incidents/${id}/handover`, { token: a.token });
+      log(`previous holder ${a.name} can no longer open the case -> HTTP ${refused.status}`);
+      const hv = await call(b, 'GET', '/handover', undefined, `${b.name} opened the handover summary`);
+      const h = hv.json.handover;
+      log(`handover: held by ${h.currentAssignee.name}; assignments: ${h.assignments.map((x) => x.assignee).join(' -> ')}; ${h.recentNotes.length} note(s)`);
+      await call(b, 'PATCH', '/status', { status: 'resolved', note: 'Tourist found safe - simulated' }, `${b.name} resolved the incident`);
+      return {
+        expect: ['The activity history shows every step in order, with both responders named.', 'The Handover summary card lists the assignment history chronologically.', 'Responder A was refused access after the handover (server-enforced).'],
+        links: [link(`/admin/incidents/${id}`)],
       };
     },
   },

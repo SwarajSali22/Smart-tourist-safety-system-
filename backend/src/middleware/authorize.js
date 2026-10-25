@@ -11,6 +11,9 @@ function authorize(...allowedRoles) {
       return res.status(401).json({ success: false, message: 'Not authenticated' });
     }
     if (!allowedRoles.includes(req.user.role)) {
+      require('../services/activity/logActivity').logActivity({
+        req, action: 'authz.denied', outcome: 'denied', summary: `${req.method} ${req.originalUrl.split('?')[0]}`,
+      });
       return res.status(403).json({ success: false, message: 'Forbidden' });
     }
     next();

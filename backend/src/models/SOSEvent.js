@@ -27,6 +27,9 @@ const sosEventSchema = new mongoose.Schema(
       enum: ['active', 'acknowledged', 'resolved', 'false_alarm'],
       default: 'active',
     },
+    // When the tourist pressed the button, if the request was held on their device (offline queue).
+    // Informational only: createdAt is always the server's own receipt time.
+    clientTriggeredAt: { type: Date, default: null },
     acknowledgedAt: { type: Date, default: null },
     acknowledgedBy: {
       type: mongoose.Schema.Types.ObjectId,

@@ -17,4 +17,34 @@ module.exports = {
     assigned: 15 * MIN,     // Assigned, not yet en route
     en_route: 45 * MIN,     // En route, not yet resolved
   },
+  // Rule-based / hybrid risk scoring. Each factor contributes at most its weight (default weights sum
+  // to 100). Override the weights with RISK_WEIGHTS='{"safetyCheck":30,...}' (partial objects are fine).
+  risk: {
+    weights: (() => {
+      const base = { safetyCheck: 25, zoneRisk: 25, violation: 20, incident: 15, movement: 10, connectivity: 5 };
+      try { return { ...base, ...JSON.parse(process.env.RISK_WEIGHTS || '{}') }; } catch { return base; }
+    })(),
+    bands: { medium: 30, high: 60, critical: 85 },   // score at which each level starts
+    staleDeviceMs: 30 * MIN,                          // no telemetry for this long while "active"
+    lowBattery: 20,
+    violationWindowMs: 24 * 60 * MIN,
+    violationPoints: 10,                              // per recent zone entry
+    incidentPoints: 8,                                // per open incident
+    checkSample: 5,                                   // most recent check-ins considered
+    proximityM: Number(process.env.RISK_PROXIMITY_M) || 300, // near (but outside) a restricted/danger zone
+    proximityShare: 0.4,                              // share of the zone-risk weight earned by proximity alone
+    // Alert lifecycle: a location older than device.staleMs is "stale" and never proves the tourist is in a zone.
+    clearMs: (Number(process.env.RISK_CLEAR_MIN) || 15) * MIN,              // below "high" this long (on fresh data) → auto-resolve
+    reopenCooldownMs: (Number(process.env.RISK_REOPEN_COOLDOWN_MIN) || 30) * MIN, // after a resolve, no new alert for the same condition
+    repeatNoteMs: 30 * MIN,                                                  // a still-open alert gets at most one timeline note per interval
+    outdatedMs: 30 * MIN,                                                    // a score older than this is shown as outdated, not current
+    refreshMs: 5 * MIN,                                                      // high/critical scores older than this are re-evaluated by the scheduler
+  },
+  // Escalation of high-priority incidents (checked by the scheduler; each incident escalates once).
+  // Override with INCIDENT_ESCALATE_UNACK_MIN / INCIDENT_ESCALATE_UNRESOLVED_MIN.
+  escalation: {
+    unacknowledgedMs: (Number(process.env.INCIDENT_ESCALATE_UNACK_MIN) || 5) * MIN,
+    unresolvedMs: (Number(process.env.INCIDENT_ESCALATE_UNRESOLVED_MIN) || 60) * MIN,
+    priorities: ['high', 'urgent'],
+  },
 };

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { sendOrQueue } from '../../shared/offline/queue.js';
 import { api, tokens } from '../../api/client.js';
 import { connectSocket } from '../../shared/socket/socket.js';
 import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
@@ -53,10 +54,15 @@ function TouristChecks() {
     setError('');
     setResponding(true);
     try {
-      const data = await api.post(`/safety-checks/${check._id}/respond`, { response });
-      setCheck(data.safetyCheck);
-      if (response === 'safe') toast.success(t('checks.toast.safe'));
-      else toast.warning(t('checks.toast.help'), { title: t('checks.toast.helpTitle') });
+      const r = await sendOrQueue({ kind: 'check_response', label: `Check-in answer: ${response}`, path: `/safety-checks/${check._id}/respond`, body: { response } });
+      if (r.status === 'queued') {
+        // Not delivered: only stored on this device until the connection returns.
+        toast.warning('No connection — your answer is saved on this device and has not been sent yet. It will be sent automatically.', { title: 'Waiting to send' });
+      } else {
+        setCheck(r.data.safetyCheck);
+        if (response === 'safe') toast.success(t('checks.toast.safe'));
+        else toast.warning(t('checks.toast.help'), { title: t('checks.toast.helpTitle') });
+      }
     } catch (err) {
       setError(err.message || t('checks.error'));
     } finally {

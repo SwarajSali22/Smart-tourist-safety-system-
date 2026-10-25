@@ -1,0 +1,108 @@
+/* ──────────────────────────────────────────────────────────────────────────────
+   Motion system — one set of durations, one easing, a handful of utilities.
+
+   Rules of the system
+   • Only opacity and transform are animated (no layout shifts, cheap to paint).
+   • Routine feedback 150–250 ms, entrances 250–400 ms. Nothing blocks an action: animations are
+     purely visual and every control stays clickable while it plays.
+   • prefers-reduced-motion collapses every duration (see the last block and App.css).
+
+   Utilities
+     .page-transition   wraps each routed page (AppShell)
+     .stagger           children fade/slide in one after another (also applied to the stat/card grids)
+     .reveal            a panel / message / dropdown that appears after an interaction
+     .pulse-ring        restrained highlight for an active emergency item
+   ────────────────────────────────────────────────────────────────────────────── */
+:root {
+  --dur-fast: 150ms;
+  --dur-base: 250ms;
+  --dur-slow: 400ms;
+  --ease-out: cubic-bezier(.22, 1, .36, 1);
+  --ease-in-out: cubic-bezier(.4, 0, .2, 1);
+}
+
+@keyframes m-fade-up   { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes m-fade-down { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@keyframes m-fade      { from { opacity: 0; } to { opacity: 1; } }
+@keyframes m-pop       { from { opacity: 0; transform: scale(.96) translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes m-bar       { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes m-hbar      { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes m-ring      { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-danger) 45%, transparent); } 70%, 100% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--color-danger) 0%, transparent); } }
+@keyframes m-slide-in-right { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+
+/* Page entrance. Fill-mode "backwards" so no transform lingers afterwards (fixed-position children,
+   such as the full-screen map, must not end up inside a transformed ancestor). */
+.page-transition { animation: m-fade-up var(--dur-slow) var(--ease-out) backwards; }
+
+/* Staggered groups — capped at 8 steps so long grids never feel slow */
+.stagger > *,
+.stats-grid > *, .dashboard-grid > *, .hc-grid > *, .team-grid > *, .route-list > *, .trip-card {
+  animation: m-fade-up var(--dur-slow) var(--ease-out) backwards;
+}
+.stagger > :nth-child(2), .stats-grid > :nth-child(2), .dashboard-grid > :nth-child(2), .hc-grid > :nth-child(2), .team-grid > :nth-child(2) { animation-delay: 45ms; }
+.stagger > :nth-child(3), .stats-grid > :nth-child(3), .dashboard-grid > :nth-child(3), .hc-grid > :nth-child(3), .team-grid > :nth-child(3) { animation-delay: 90ms; }
+.stagger > :nth-child(4), .stats-grid > :nth-child(4), .dashboard-grid > :nth-child(4), .hc-grid > :nth-child(4), .team-grid > :nth-child(4) { animation-delay: 135ms; }
+.stagger > :nth-child(5), .stats-grid > :nth-child(5), .dashboard-grid > :nth-child(5), .hc-grid > :nth-child(5), .team-grid > :nth-child(5) { animation-delay: 180ms; }
+.stagger > :nth-child(6), .stats-grid > :nth-child(6), .dashboard-grid > :nth-child(6), .hc-grid > :nth-child(6), .team-grid > :nth-child(6) { animation-delay: 225ms; }
+.stagger > :nth-child(7), .stats-grid > :nth-child(7), .dashboard-grid > :nth-child(7), .hc-grid > :nth-child(7), .team-grid > :nth-child(7) { animation-delay: 270ms; }
+.stagger > :nth-child(n+8), .stats-grid > :nth-child(n+8), .dashboard-grid > :nth-child(n+8), .hc-grid > :nth-child(n+8), .team-grid > :nth-child(n+8) { animation-delay: 300ms; }
+/* The stat cards inside an interactive wrapper animate the wrapper, not twice */
+.stat-link .card, .stat-link--btn .card { animation: none; }
+
+/* Table rows: a short fade for the first rows (new rows from filtering/searching animate in) */
+tbody tr { animation: m-fade var(--dur-base) var(--ease-out) backwards; }
+tbody tr:nth-child(n+13) { animation: none; }
+
+.reveal { animation: m-fade-down var(--dur-base) var(--ease-out) backwards; }
+
+/* ── Feedback on controls ──────────────────────────────────────────────────── */
+.btn { transition: background-color var(--dur-fast) var(--ease-in-out), border-color var(--dur-fast) var(--ease-in-out), box-shadow var(--dur-fast) var(--ease-in-out), transform var(--dur-fast) var(--ease-in-out), color var(--dur-fast) var(--ease-in-out); }
+.btn:hover:not(:disabled) { transform: translateY(-1px); }
+.btn:active:not(:disabled) { transform: translateY(0) scale(.98); }
+.icon-btn { transition: background-color var(--dur-fast), color var(--dur-fast), transform var(--dur-fast); }
+.icon-btn:active:not(:disabled) { transform: scale(.92); }
+.form-input, select.form-input, textarea.form-input { transition: border-color var(--dur-fast) var(--ease-in-out), box-shadow var(--dur-fast) var(--ease-in-out), background-color var(--dur-fast); }
+.form-input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 22%, transparent); }
+.card { transition: box-shadow var(--dur-base) var(--ease-in-out), border-color var(--dur-base) var(--ease-in-out), transform var(--dur-base) var(--ease-in-out); }
+.stat-link .card:hover, .stat-link--btn .card:hover, .hc-card:hover, .team-card:hover, .route-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+.stat-link:active .card, .stat-link--btn:active .card { transform: translateY(0) scale(.99); }
+.app-link { transition: background-color var(--dur-fast), color var(--dur-fast); }
+.link-btn { transition: color var(--dur-fast); }
+
+/* Status badges change colour smoothly when a state changes */
+.badge { transition: background-color var(--dur-base) var(--ease-in-out), color var(--dur-base) var(--ease-in-out); }
+.lifecycle__step { transition: background-color var(--dur-base) var(--ease-in-out), color var(--dur-base), border-color var(--dur-base); }
+.meter span { transition: width var(--dur-slow) var(--ease-out); }
+
+/* ── Modals, menus, toasts ─────────────────────────────────────────────────── */
+.modal-backdrop { animation: m-fade var(--dur-base) var(--ease-out) backwards; }
+.modal { animation: m-pop var(--dur-base) var(--ease-out) backwards; }
+.modal-backdrop--closing { opacity: 0; transition: opacity 160ms var(--ease-in-out); pointer-events: none; }
+.modal--closing { opacity: 0; transform: scale(.97) translateY(4px); transition: opacity 160ms var(--ease-in-out), transform 160ms var(--ease-in-out); }
+.bell__panel, .user-menu__panel, .sync__panel, .combo__list { animation: m-fade-down var(--dur-fast) var(--ease-out) backwards; }
+.toast { animation: m-slide-in-right var(--dur-base) var(--ease-out) backwards; }
+.toast--leaving { opacity: 0; transform: translateX(14px); transition: opacity 160ms var(--ease-in-out), transform 160ms var(--ease-in-out); }
+
+/* Validation / inline messages appear without jarring jumps */
+.form-error, .fld__error, .notice, .callout { animation: m-fade-down var(--dur-base) var(--ease-out) backwards; }
+
+/* ── Charts ────────────────────────────────────────────────────────────────── */
+.chart__bar { transform-box: fill-box; transform-origin: 50% 100%; animation: m-bar 500ms var(--ease-out) backwards; }
+.hbars__track > span { transform-origin: left center; animation: m-hbar 500ms var(--ease-out) backwards; }
+.chart__hit { cursor: pointer; }
+.hbars__item--link { cursor: pointer; border-radius: var(--radius-sm); transition: background-color var(--dur-fast); }
+.hbars__item--link:hover { background: var(--color-surface-2); }
+.analytics-body { transition: opacity var(--dur-base) var(--ease-in-out); }
+.analytics-body.is-refreshing { opacity: .55; }
+
+/* ── Emergencies: restrained, never flashing ───────────────────────────────── */
+.sos-banner { animation: m-fade-down var(--dur-base) var(--ease-out) backwards, banner-glow 3.2s ease-in-out 0.6s infinite; }
+@keyframes banner-glow { 0%, 100% { box-shadow: inset 0 -2px 0 rgba(255, 255, 255, .15); } 50% { box-shadow: inset 0 -2px 0 rgba(255, 255, 255, .5); } }
+.attention__item:has(.attention__icon--sos), .pulse-ring { animation: m-ring 2.6s ease-out infinite; border-radius: var(--radius-sm); }
+.sos-held { border-left: 4px solid var(--color-warning); }
+
+@media (prefers-reduced-motion: reduce) {
+  .page-transition, .stagger > *, .reveal, .modal, .modal-backdrop, .toast, tbody tr,
+  .chart__bar, .hbars__track > span, .sos-banner, .attention__item, .pulse-ring { animation: none !important; }
+  .btn:hover:not(:disabled), .card:hover { transform: none !important; }
+}

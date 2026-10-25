@@ -2,6 +2,8 @@ const { Incident, Device } = require('../../models');
 const { recordProof } = require('../blockchain/auditChain');
 const { evaluateRisk } = require('../riskAssessment/evaluateRisk');
 const { triggerSos, SosAlreadyActiveError } = require('../sos/triggerSos');
+const thresholds = require('../../config/thresholds');
+const { findRelatedIncident, attachEvent } = require('../incidents/correlate');
 
 /**
  * Escalates a SafetyCheck into an Incident, following the same
@@ -9,20 +11,27 @@ const { triggerSos, SosAlreadyActiveError } = require('../sos/triggerSos');
  * Marks the SafetyCheck escalated + linked before returning.
  */
 async function _escalate(safetyCheck, { severity, type, action, actorLabel }, io) {
-  const incident = await Incident.create({
-    tourist: safetyCheck.tourist,
-    type,
-    severity,
-    status: 'open',
-    sourceRef: { refModel: 'SafetyCheck', refId: safetyCheck._id },
-    timeline: [{ actorLabel, action }],
-  });
+  // Correlation: if this tourist already has an active incident nearby in time, add this event to it.
+  const related = await findRelatedIncident(safetyCheck.tourist);
+  let incident;
+  if (related) {
+    incident = await attachEvent(related, { action, severity, sourceModel: 'SafetyCheck', sourceId: safetyCheck._id });
+  } else {
+    incident = await Incident.create({
+      tourist: safetyCheck.tourist,
+      type,
+      severity,
+      status: 'open',
+      sourceRef: { refModel: 'SafetyCheck', refId: safetyCheck._id },
+      timeline: [{ actorLabel, action }],
+    });
+    await recordProof('incident_opened', 'Incident', incident);
+    await incident.populate('tourist', 'name email isDemo');
+  }
 
   safetyCheck.escalated = true;
   safetyCheck.incident = incident._id;
   await safetyCheck.save();
-  await recordProof('incident_opened', 'Incident', incident);
-  await incident.populate('tourist', 'name email isDemo');
 
   // A discrete, meaningful event — always re-evaluate, bypassing the
   // telemetry-path throttle in evaluateRisk.
@@ -55,6 +64,16 @@ async function escalateMissedCheck(safetyCheck, io) {
     );
   }
 
+  // The device stopped reporting, so its last position is old: don't raise a (false) SOS from it.
+  const lastSeenMs = device.lastSeen ? new Date(device.lastSeen).getTime() : 0;
+  if (Date.now() - lastSeenMs > thresholds.device.staleMs) {
+    return _escalate(
+      safetyCheck,
+      { severity: 'medium', type: 'no_response', action: 'Safety check unanswered (device offline)', actorLabel: 'system' },
+      io
+    );
+  }
+
   let incident;
   try {
     ({ incident } = await triggerSos({
@@ -68,10 +87,10 @@ async function escalateMissedCheck(safetyCheck, io) {
     if (!(err instanceof SosAlreadyActiveError)) throw err;
     // Already in an active SOS/emergency — attach to that open incident
     // instead of creating a duplicate.
-    incident = await Incident.findOne({
-      tourist: safetyCheck.tourist,
-      status: { $in: ['open', 'in_progress'] },
-    }).sort({ createdAt: -1 });
+    const related = await findRelatedIncident(safetyCheck.tourist);
+    incident = related
+      ? await attachEvent(related, { action: 'Safety check unanswered', severity: 'high', sourceModel: 'SafetyCheck', sourceId: safetyCheck._id })
+      : await Incident.findOne({ tourist: safetyCheck.tourist, status: { $in: ['open', 'in_progress'] } }).sort({ createdAt: -1 });
   }
 
   safetyCheck.escalated = true;

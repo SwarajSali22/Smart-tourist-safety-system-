@@ -32,6 +32,13 @@ const riskAssessmentSchema = new mongoose.Schema(
       movementScore: { type: Number, default: 0 },      // movement anomaly
       connectivityScore: { type: Number, default: 0 },  // device offline / battery low
     },
+    // Plain-language reason for each factor ({ key, label, points, max, detail })
+    explanation: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    // Was the position behind this score too old to say where the tourist is now?
+    locationStale: { type: Boolean, default: false },
+    locationAgeMin: { type: Number, default: null },
+    // How the score was produced — it is rule-based/hybrid, not a trained ML model
+    method: { type: String, default: 'rule-based-hybrid' },
     // Rule-triggered override (e.g. SOS pressed, danger zone entered)
     ruleTriggered: {
       type: Boolean,

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, Circle } from 'lucide-react';
 import { api, tokens } from '../../api/client.js';
+import { sendOrQueue, useOfflineQueue } from '../../shared/offline/queue.js';
 import { connectSocket } from '../../shared/socket/socket.js';
 import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
 import { useToast } from '../../shared/components/ui/Toast.jsx';
@@ -33,6 +34,11 @@ function TouristSOS() {
   const [armed, setArmed] = useState(false);
   const [triggering, setTriggering] = useState(false);
   const [error, setError] = useState('');
+  const queue = useOfflineQueue();
+  const heldToast = useRef(null);
+  const heldSos = queue.find((e) => e.kind === 'sos' && e.status === 'pending');
+  const failedSos = queue.find((e) => e.kind === 'sos' && e.status === 'failed');
+  const syncedSos = queue.filter((e) => e.kind === 'sos' && e.status === 'synced').length;
 
   useEffect(() => {
     api.get('/sos/mine').then((data) => setSosEvent(data.sosEvent)).catch(() => setSosEvent(null));
@@ -50,6 +56,16 @@ function TouristSOS() {
       socket.off('sos:updated', onSos);
     };
   }, []);
+
+  useEffect(() => {
+    api.get('/sos/mine').then((d) => setSosEvent(d.sosEvent)).catch(() => {});
+    if (syncedSos > 0 && heldToast.current != null) {
+      // The held request has now been confirmed by the server: replace the "not delivered" warning.
+      toast.dismiss(heldToast.current);
+      heldToast.current = null;
+      toast.success('Your SOS has now been delivered to the server.', { title: 'Delivered' });
+    }
+  }, [syncedSos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useOnReconnect(() => {
     api.get('/sos/mine').then((d) => setSosEvent(d.sosEvent)).catch(() => {});
@@ -74,11 +90,22 @@ function TouristSOS() {
     setTriggering(true);
     vibrate([250, 100, 250]); // longer pattern: sending
     try {
-      const data = await api.post('/sos', {});
-      setSosEvent(data.sosEvent);
-      toast.success(t('sos.toast.body'), { title: t('sos.toast.title') });
+      const r = await sendOrQueue({ kind: 'sos', label: 'SOS emergency request', path: '/sos', body: { clientTriggeredAt: new Date().toISOString() } });
+      if (r.status === 'queued') {
+        // Never present this as sent: nothing has reached the server.
+        setError('');
+        heldToast.current = toast.warning('Your SOS is saved on this device but has NOT been sent. It will be sent automatically when you are back online.', { title: 'Not delivered yet', duration: 15000 });
+      } else {
+        setSosEvent(r.data.sosEvent);
+        toast.success(t('sos.toast.body'), { title: t('sos.toast.title') });
+      }
     } catch (err) {
-      setError(err.message || t('sos.error'));
+      // 409 = the server already has an active SOS for this tourist: that is delivery, not failure
+      if (err.status === 409) {
+        api.get('/sos/mine').then((d) => setSosEvent(d.sosEvent)).catch(() => {});
+      } else {
+        setError(err.message || t('sos.error'));
+      }
     } finally {
       setTriggering(false);
     }
@@ -90,6 +117,18 @@ function TouristSOS() {
   return (
     <div className="app-page">
       <h1 className="page-title">{t('sos.title')}</h1>
+
+      {(heldSos || failedSos) && (
+        <div className={`callout ${failedSos && !heldSos ? 'callout--danger' : 'callout--warning'} sos-held reveal`} role="alert">
+          <strong>{heldSos ? 'Your SOS has NOT been sent yet.' : 'Your SOS could not be sent.'}</strong>
+          <p>
+            {heldSos
+              ? 'There is no connection to the server, so the request is only stored on this device. It will be sent automatically as soon as you are back online. Until the server confirms it, no one has been alerted.'
+              : `The server did not accept the request${failedSos?.lastError ? ` (${failedSos.lastError})` : ''}. Retry from the sync indicator at the top of the page.`}
+          </p>
+          <p><strong>If you are in danger, contact your local emergency number or a person nearby directly.</strong></p>
+        </div>
+      )}
 
       <Card>
         {error && <p className="form-error" role="alert">{error}</p>}
@@ -117,7 +156,7 @@ function TouristSOS() {
             <button
               className={`sos-big${armed ? ' sos-big--armed' : ''}`}
               onClick={handleSosClick}
-              disabled={triggering || sosEvent === undefined}
+              disabled={triggering || sosEvent === undefined || Boolean(heldSos)}
               aria-label={armed ? t('sos.buttonArmed') : t('sos.button')}
             >
               <span className={`sos-big__label${armed || triggering ? ' sos-big__label--sm' : ''}`}>

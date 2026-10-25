@@ -16,6 +16,10 @@ const notificationRoutes = require('./notification.routes');
 const userRoutes = require('./user.routes');
 const helpCenterRoutes = require('./helpCenter.routes');
 const geocodeRoutes = require('./geocode.routes');
+const tripRoutes = require('./trip.routes');
+const routeRiskRoutes = require('./routeRisk.routes');
+const auditRoutes = require('./audit.routes');
+const copilotRoutes = require('./copilot.routes');
 
 const router = express.Router();
 
@@ -36,5 +40,9 @@ router.use('/notifications', notificationRoutes);
 router.use('/users', userRoutes);
 router.use('/help-centers', helpCenterRoutes);
 router.use('/geocode', geocodeRoutes);
+router.use('/trips', tripRoutes);
+router.use('/route-risk', routeRiskRoutes);
+router.use('/audit', auditRoutes);
+router.use('/copilot', copilotRoutes);
 
 module.exports = router;

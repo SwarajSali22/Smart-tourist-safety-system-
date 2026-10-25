@@ -25,7 +25,7 @@ export function useRiskBoard() {
       setAssessments((list) => {
         const id = touristIdOf(r);
         const rest = list.filter((x) => touristIdOf(x) !== id);
-        return [r, ...rest].sort((a, b) => b.score - a.score);
+        return [{ ...r, outdated: false, ageMin: 0 }, ...rest].sort((a, b) => b.score - a.score);
       });
     }
     socket.on('risk:updated', onRisk);
@@ -36,7 +36,9 @@ export function useRiskBoard() {
     api.get('/risk').then((d) => setAssessments(d.assessments || [])).catch(() => {});
   });
 
+  // Scores older than the server's `outdated` limit are shown as outdated and never drive map colours or "at risk now" counts.
+  const current = assessments.filter((a) => !a.outdated);
   const byTourist = {};
-  assessments.forEach((a) => { byTourist[touristIdOf(a)] = a; });
-  return { assessments, byTourist, loading, error };
+  current.forEach((a) => { byTourist[touristIdOf(a)] = a; });
+  return { assessments, current, byTourist, loading, error };
 }

@@ -13,7 +13,7 @@ const niceMax = (max) => {
   return Math.ceil(max / pow) * pow;
 };
 
-export function BarChart({ data, title, unit = 'incidents', height = 180 }) {
+export function BarChart({ data, title, unit = 'incidents', height = 180, onSelect }) {
   const [active, setActive] = useState(null);
   const W = 560;
   const pad = { l: 28, r: 8, t: 10, b: 24 };
@@ -66,6 +66,10 @@ export function BarChart({ data, title, unit = 'incidents', height = 180 }) {
                 onMouseLeave={() => setActive(null)}
                 onFocus={() => setActive(i)}
                 onBlur={() => setActive(null)}
+                className={onSelect ? 'chart__hit' : undefined}
+                onClick={onSelect ? () => onSelect(d) : undefined}
+                onKeyDown={onSelect ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(d); } } : undefined}
+                role={onSelect ? 'link' : undefined}
               />
             </g>
           );
@@ -87,13 +91,17 @@ export function BarChart({ data, title, unit = 'incidents', height = 180 }) {
 }
 
 /** Horizontal bars for ranked categories (direct value labels, one hue). */
-export function HBarChart({ data, title, unit = '' }) {
+export function HBarChart({ data, title, unit = '', onSelect }) {
   const max = Math.max(1, ...data.map((d) => d.value));
   return (
     <figure className="hbars" aria-label={title}>
       <ul>
         {data.map((d) => (
-          <li key={d.label}>
+          <li key={d.label} className={onSelect ? 'hbars__item--link' : undefined}
+            onClick={onSelect ? () => onSelect(d) : undefined}
+            onKeyDown={onSelect ? (e) => { if (e.key === 'Enter') onSelect(d); } : undefined}
+            tabIndex={onSelect ? 0 : undefined} role={onSelect ? 'link' : undefined}
+            aria-label={onSelect ? `${d.label}: ${d.value}. Open the matching incidents` : undefined}>
             <span className="hbars__label">{d.label}</span>
             <span className="hbars__track" aria-hidden="true">
               <span style={{ width: `${(d.value / max) * 100}%` }} />

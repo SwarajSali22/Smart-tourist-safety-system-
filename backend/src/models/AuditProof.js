@@ -21,6 +21,7 @@ const auditProofSchema = new mongoose.Schema(
         'incident_opened',
         'incident_resolved',
         'incident_assigned',
+        'incident_escalated',
         'admin_action',
       ],
       required: true,

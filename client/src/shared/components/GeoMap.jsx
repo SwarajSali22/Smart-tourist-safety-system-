@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import MapInteractions, { MAP_INTERACTION_OPTIONS } from './MapInteractions.jsx';
 import { MapContainer, TileLayer, Polygon, Polyline, Marker, CircleMarker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import { divIcon } from 'leaflet';
 import { Maximize2, Minimize2 } from 'lucide-react';
@@ -156,6 +157,7 @@ function InvalidateOn({ dep }) {
  *    (`riskByTourist` maps touristId → latest RiskAssessment).
  *  - `onMapClick` + `draftPoints` → click-to-place polygon drawing; pass `onDraftChange(index, latlng)`
  *    to make every placed vertex draggable so the shape can be adjusted afterwards.
+ *  - `routes` → [{ id, points, color, dashed, label }] planned/recommended routes; `pins` → [{ id, lat, lng, title, text, tone }] labelled stops.
  *  - `trails` → [{ id, points: [[lat,lng]…] }] polylines; `replayPoint` → moving dot.
  *  - `heatPoints` → [{ lat, lng, weight }] incident density overlay.
  *  - `flyTo` → { lat, lng, key } smooth recenter; `fit` → { key, points } fit-all; `selectedDeviceId` highlights one device.
@@ -171,6 +173,8 @@ function GeoMap({
   devices = [],
   riskByTourist = {},
   trails = [],
+  routes = [],
+  pins = [],
   heatPoints = [],
   replayPoint,
   selectedDeviceId,
@@ -210,7 +214,8 @@ function GeoMap({
         </button>
       )}
 
-      <MapContainer center={center} zoom={zoom} style={{ height: '100%', width: '100%' }}>
+      <MapContainer center={center} zoom={zoom} {...MAP_INTERACTION_OPTIONS} style={{ height: '100%', width: '100%' }}>
+        <MapInteractions />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -264,6 +269,25 @@ function GeoMap({
 
         {trails.map((t) => (
           <Polyline key={t.id} positions={t.points} pathOptions={{ color: '#4f46e5', weight: 3, opacity: 0.75 }} />
+        ))}
+
+        {routes.map((r) => (
+          <Polyline
+            key={r.id}
+            positions={r.points}
+            pathOptions={{ color: r.color || '#4f46e5', weight: r.weight || 5, opacity: r.opacity ?? 0.85, dashArray: r.dashed ? '8 8' : undefined }}
+          >
+            {r.label && <Popup>{r.label}</Popup>}
+          </Polyline>
+        ))}
+
+        {pins.map((p) => (
+          <Marker key={p.id} position={[p.lat, p.lng]} icon={deviceIcon(`pin pin--${p.tone || 'info'}`)}>
+            <Popup>
+              <strong>{p.title}</strong>
+              {p.text && <><br />{p.text}</>}
+            </Popup>
+          </Marker>
         ))}
 
         {replayPoint && (

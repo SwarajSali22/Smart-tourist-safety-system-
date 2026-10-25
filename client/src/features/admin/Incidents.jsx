@@ -15,6 +15,7 @@ import { downloadServerCsv } from '../../shared/utils/csv.js';
 import { formatDateTime, label, timeAgo } from '../../shared/utils/format.js';
 
 export const SEVERITY_BADGE = { low: 'neutral', medium: 'info', high: 'warning', critical: 'danger' };
+export const PRIORITY_BADGE = { low: 'neutral', normal: 'neutral', high: 'warning', urgent: 'danger' };
 export const STATUS_BADGE = { open: 'danger', in_progress: 'warning', assigned: 'info', en_route: 'info', resolved: 'success', closed: 'neutral' };
 
 const PAGE_SIZE = 15;
@@ -41,6 +42,11 @@ function Incidents() {
   const statusValue = active ? 'active' : statusParam;
   const severity = params.get('severity') || '';
   const type = params.get('type') || '';
+  const priority = params.get('priority') || '';
+  const escalated = params.get('escalated') === '1';
+  const assignee = params.get('assignee') || '';
+  const from = params.get('from') || '';
+  const to = params.get('to') || '';
   const sort = params.get('sort') || 'createdAt';
   const order = params.get('order') || 'desc';
   const page = Math.max(1, Number(params.get('page')) || 1);
@@ -49,6 +55,8 @@ function Incidents() {
   const [data, setData] = useState(null); // { incidents, total, pages }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [people, setPeople] = useState([]);
+  useEffect(() => { api.get('/users/assignable?all=1').then((d) => setPeople(d.users || [])).catch(() => {}); }, []);
 
   const setParam = useCallback((changes) => {
     setParams((prev) => {
@@ -71,9 +79,14 @@ function Incidents() {
     if (active) sp.set('active', '1'); else if (statusParam) sp.set('status', statusParam);
     if (severity) sp.set('severity', severity);
     if (type) sp.set('type', type);
+    if (priority) sp.set('priority', priority);
+    if (escalated) sp.set('escalated', '1');
+    if (assignee) sp.set('assignee', assignee);
+    if (from) sp.set('from', new Date(`${from}T00:00:00`).toISOString());
+    if (to) sp.set('to', new Date(`${to}T23:59:59.999`).toISOString());
     sp.set('sort', sort); sp.set('order', order); sp.set('page', String(page)); sp.set('limit', String(PAGE_SIZE));
     return sp.toString();
-  }, [q, active, statusParam, severity, type, sort, order, page]);
+  }, [q, active, statusParam, severity, type, priority, escalated, assignee, from, to, sort, order, page]);
 
   const load = useCallback(() => {
     return api.get(`/incidents?${queryString}`)
@@ -121,7 +134,7 @@ function Incidents() {
   }
 
   const rows = data?.incidents || [];
-  const filtered = Boolean(q || statusValue || severity || type);
+  const filtered = Boolean(q || statusValue || severity || type || priority || escalated || assignee || from || to);
   const clearFilters = () => { setQInput(''); setParams({}, { replace: true }); };
 
   const columns = [
@@ -130,10 +143,12 @@ function Incidents() {
     ) },
     { key: 'type', header: 'Type', sortKey: 'type', render: (i) => label(i.type) },
     { key: 'severity', header: 'Severity', sortKey: 'severity', render: (i) => <Badge variant={SEVERITY_BADGE[i.severity]}>{label(i.severity)}</Badge> },
+    { key: 'priority', header: 'Priority', render: (i) => <Badge variant={PRIORITY_BADGE[i.priority || 'normal']}>{label(i.priority || 'normal')}</Badge> },
     { key: 'status', header: 'Status', sortKey: 'status', render: (i) => (
       <span className="badge-row">
         <Badge variant={STATUS_BADGE[i.status]}>{label(i.status)}</Badge>
         {i.overdue && <span className="badge badge--overdue" title="Sitting in this state longer than the target">Overdue</span>}
+        {i.escalatedAt && <span className="badge badge--escalated" title={i.escalationReason || 'Escalated'}>Escalated</span>}
       </span>
     ) },
     { key: 'assignee', header: 'Assigned to', render: (i) => i.assignedAdmin?.name || '—' },
@@ -192,6 +207,15 @@ function Incidents() {
                   {select(statusValue, (v) => (v === 'active' ? setParam({ active: '1', status: '' }) : setParam({ status: v, active: '' })), STATUS_OPTIONS, 'Filter by status')}
                   {select(severity, (v) => setParam({ severity: v }), [['', 'All severities'], ['critical', 'Critical'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']], 'Filter by severity')}
                   {select(type, (v) => setParam({ type: v }), TYPE_OPTIONS, 'Filter by type')}
+                  {select(priority, (v) => setParam({ priority: v }), [['', 'All priorities'], ['urgent', 'Urgent'], ['high', 'High'], ['normal', 'Normal'], ['low', 'Low']], 'Filter by priority')}
+                  {select(assignee, (v) => setParam({ assignee: v }), [['', 'Anyone assigned'], ...people.map((p) => [p._id, `${p.name} (${p.role})`])], 'Filter by assigned responder')}
+                  <label className="filter filter--check">
+                    <input type="checkbox" checked={escalated} onChange={(e) => setParam({ escalated: e.target.checked ? '1' : '' })} /> Escalated only
+                  </label>
+                  <label className="filter filter--date"><span className="form-hint">From</span>
+                    <input className="form-input" type="date" value={from} max={to || undefined} onChange={(e) => setParam({ from: e.target.value })} aria-label="Created from" /></label>
+                  <label className="filter filter--date"><span className="form-hint">To</span>
+                    <input className="form-input" type="date" value={to} min={from || undefined} onChange={(e) => setParam({ to: e.target.value })} aria-label="Created until" /></label>
                   {filtered && <button type="button" className="btn btn--ghost btn--sm" onClick={clearFilters}>Clear filters</button>}
                 </div>
               }

@@ -402,3 +402,48 @@ Be aware of these when presenting or deploying:
 - **Not implemented:** trained ML/anomaly models, route-deviation detection, multi-language and voice SOS, installable PWA / offline SOS queue, a police-responder role, QR digital tourist ID, public-blockchain anchoring, email/push notifications to contacts.
 - The audit chain assumes a single running backend instance.
 - Two lint errors remain in `AuthContext.jsx` and `useLiveLocation.js` (a strict React rule about setting state inside an effect); they do not affect behaviour.
+
+
+---
+
+## 11. Advanced features (added later)
+
+| Area | What it does | Honest limits |
+|---|---|---|
+| **Analytics & reports** | `/admin/analytics`: 24 h / 7 d / 30 d / custom range, filters (type, severity, status, tourist, circular area), period-over-period comparison, drill-down into the incident list, CSV (`/api/analytics/report.csv`) and PDF (`/api/analytics/report.pdf`) built from the same filters. | Area filtering only covers incidents that have a recorded location (SOS and zone events). |
+| **Incident management** | Priority (separate from severity), reassignment, evidence references (links / notes — no file uploads), response/resolution times, escalation of unacknowledged or long-unresolved high-priority incidents (`INCIDENT_ESCALATE_UNACK_MIN`, `INCIDENT_ESCALATE_UNRESOLVED_MIN`), escalation is recorded once in the audit chain. | Incidents created before this change have no priority and are never auto-escalated. |
+| **Trips** | `/tourist/trips`: stops with expected arrival, check-in reminders, GPS or manual arrival, warnings for overdue stops / missed check-ins / route deviation (`TRIP_STOP_GRACE_MIN`, `TRIP_CHECKIN_GRACE_MIN`). Admins see active trips at `/admin/trips`. | Warnings never raise an SOS by themselves. Deviation/arrival need a fresh position; simulated devices are labelled as simulated. |
+| **Route safety** | `POST /api/route-risk` compares OSRM routes (`ROUTING_BASE_URL`, default public OSRM demo) with the configured restricted/danger zones and recent SOS locations. | An estimate from admin-drawn zones only; never "safe". Falls back to a labelled straight line if routing is unreachable. |
+| **Risk scoring** | Rule-based / hybrid (rules decide emergencies; a weighted score is advisory) with a per-factor explanation. Weights and bands: `config/thresholds.js` (`RISK_WEIGHTS`, `RISK_PROXIMITY_M`). `GET /api/risk/config` describes the method. | **Not** a trained machine-learning model; no training data exists. |
+| **Offline queue** | SOS, check-in answers and trip actions that cannot reach the server are held on the device with a unique id (`Idempotency-Key`) and replayed when online. The UI shows pending / delivered / failed. | A held SOS has **not** been sent and the UI says so. No service worker / PWA. |
+| **Security & audit** | Activity log (`/api/audit/activity`, shown under Audit proofs): sign-ins, failed sign-ins, denied access, incident actions, user changes. Integrity failures raise a persistent banner. | The SHA-256 chain is unchanged; the original assignment proof stays valid after a reassignment. |
+
+## 12. AI Copilot (Admin and Tourist)
+
+A separate **AI Copilot** page (`/admin/copilot`, `/tourist/copilot`, in each sidebar) lets users ask questions in plain language.
+How it works, in viva-sized steps:
+
+1. The browser sends the conversation to `POST /api/copilot/chat` (signed-in admins and tourists only; responders have none).
+2. The backend gives the AI model (Google Gemini, free tier — default `gemini-3.5-flash-lite`, then `gemini-3.1-flash-lite`, `gemini-3.8-flash`) the question plus a **fixed list of read-only functions for that role**
+   (`backend/src/services/copilot/tools.js`). Admin: operations overview, incidents + timeline, responders, devices, health, zones...
+   Tourist: *own* status only, nearby places, routes, safe zones, registered help centers.
+3. The model decides which functions it needs; **the server runs them** (permissions are enforced in code, not in the prompt) and returns the
+   live results; the model then writes the answer in the user's language. Up to 6 rounds; nothing is written to the database.
+4. **Real nearby places** (hospitals, police, pharmacies, fire stations — even ones nobody registered in STS) come from OpenStreetMap through the
+   Overpass API; walking/driving distance from OSRM routing. They are shown as cards with straight-line distance, directions links and an
+   optional map (existing `GeoMap`). Official STS safe zones and registered help centers are separate sources and labelled as such.
+5. Languages: the existing English / हिन्दी / मराठी system (`I18nProvider`). The admin area has no switcher, so the admin Copilot page mounts the
+   same provider and shows the same `LanguageSwitcher` — no other admin page changes. The AI answers in the selected language.
+6. Voice: optional microphone button using the browser's built-in speech recognition (text appears for editing; nothing is recorded by STS).
+
+Safety: the AI cannot close incidents, assign responders, change zones or send alerts; tourists cannot reach other people's data; every
+lookup result carries a timestamp and failures are reported, not hidden. If `GEMINI_API_KEY` is empty or the provider is down, the page
+says so and SOS and all other features keep working. Tests: `backend/tests/copilot.test.js` (scripted fake model, real tools).
+
+Configuration: see the "AI Copilot" block in `backend/.env.example`. Cost control: **zero paid usage** — a free-tier Google AI Studio key (no billing account), a per-user daily limit (`COPILOT_DAILY_LIMIT`), a burst
+rate limit, an answer-length cap, 5-minute caching of place searches, and no paid fallback. When the free quota is used up the Copilot says so
+and resumes automatically when the quota resets.
+
+**Get the free key:** sign in at <https://aistudio.google.com> -> *Get API key* -> *Create API key* in a new project (do not attach billing) ->
+put it in `backend/.env` as `GEMINI_API_KEY=...` -> restart the backend -> run `node ../scripts/copilotCheck.js` from `backend/`.
+Your live limits are at <https://aistudio.google.com/rate-limit>. Free-tier prompts may be used by Google to improve its products.

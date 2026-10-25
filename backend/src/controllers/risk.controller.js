@@ -1,11 +1,18 @@
 const { RiskAssessment, User } = require('../models');
 const { evaluateRisk } = require('../services/riskAssessment/evaluateRisk');
+const thresholds = require('../config/thresholds');
+
+// A score is only "current" while it is recent; older ones are returned but flagged.
+const withAge = (a) => {
+  const ageMin = Math.round((Date.now() - new Date(a.evaluatedAt).getTime()) / 60000);
+  return { ...a, ageMin, outdated: ageMin * 60000 > thresholds.risk.outdatedMs };
+};
 
 // ── GET /api/risk/mine  (tourist only) ────────────────────────────────────────
 async function getMyRisk(req, res, next) {
   try {
     const riskAssessment = await RiskAssessment.findOne({ tourist: req.user.id }).sort({ evaluatedAt: -1 });
-    return res.json({ success: true, riskAssessment: riskAssessment || null });
+    return res.json({ success: true, riskAssessment: riskAssessment ? withAge(riskAssessment.toObject()) : null });
   } catch (err) {
     next(err);
   }
@@ -21,7 +28,7 @@ async function listLatestRisk(req, res, next) {
       { $sort: { score: -1 } },
     ]);
     await RiskAssessment.populate(latest, { path: 'tourist', select: 'name email isDemo' });
-    return res.json({ success: true, assessments: latest });
+    return res.json({ success: true, assessments: latest.map(withAge) });
   } catch (err) {
     next(err);
   }

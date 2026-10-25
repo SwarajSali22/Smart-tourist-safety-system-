@@ -118,3 +118,23 @@ select.form-input { height: 42px; }
 
 @media (max-width: 1000px) { .hc-form { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .fs__grid, .team-form { grid-template-columns: 1fr; } .hc-grid, .team-grid { grid-template-columns: 1fr; } }
+
+/* ── Login entrance animation ──────────────────────────────────────────────── */
+@keyframes login-slide-left  { from { opacity: 0; transform: translateX(-56px); } to { opacity: 1; transform: none; } }
+@keyframes login-slide-right { from { opacity: 0; transform: translateX(56px); }  to { opacity: 1; transform: none; } }
+@keyframes login-drop        { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: none; } }
+.auth-page--dual { overflow-x: clip; }
+.login-wrap--anim .login-wrap__brand,
+.login-wrap--anim .login-wrap__title { animation: login-drop .6s cubic-bezier(.22, 1, .36, 1) both; }
+.login-wrap--anim .login-wrap__title { animation-delay: .08s; }
+.login-wrap--anim .login-grid > .login-panel:first-child { animation: login-slide-left .7s cubic-bezier(.22, 1, .36, 1) .12s both; }
+.login-wrap--anim .login-grid > .login-panel:last-child  { animation: login-slide-right .7s cubic-bezier(.22, 1, .36, 1) .24s both; }
+@media (max-width: 760px) {
+  @keyframes login-slide-left  { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+  @keyframes login-slide-right { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-wrap--anim .login-wrap__brand,
+  .login-wrap--anim .login-wrap__title,
+  .login-wrap--anim .login-grid > .login-panel { animation: none; }
+}

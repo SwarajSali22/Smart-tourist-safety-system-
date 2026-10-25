@@ -14,6 +14,9 @@ const Incident = require('./Incident');
 const Notification = require('./Notification');
 const AuditProof = require('./AuditProof');
 const HelpCenter = require('./HelpCenter');
+const ActivityLog = require('./ActivityLog');
+const Trip = require('./Trip');
+const IdempotencyKey = require('./IdempotencyKey');
 
 module.exports = {
   User,
@@ -29,4 +32,7 @@ module.exports = {
   Notification,
   AuditProof,
   HelpCenter,
+  ActivityLog,
+  Trip,
+  IdempotencyKey,
 };

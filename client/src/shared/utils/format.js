@@ -31,13 +31,14 @@ export function label(value) {
 }
 
 export function formatDateTime(date) {
-  if (!date) return '—';
+  if (!date || Number.isNaN(new Date(date).getTime())) return '—';
   return new Date(date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
 /** "just now", "3 min ago", "2 h ago", "4 d ago". `now` lets callers re-render on a tick. */
 export function timeAgo(date, now = Date.now()) {
   if (!date) return 'never';
+  if (Number.isNaN(new Date(date).getTime())) return 'unknown';
   const secs = Math.max(0, Math.round((now - new Date(date).getTime()) / 1000));
   if (secs < 45) return 'just now';
   const mins = Math.round(secs / 60);

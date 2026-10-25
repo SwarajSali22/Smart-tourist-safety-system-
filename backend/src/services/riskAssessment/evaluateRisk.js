@@ -1,7 +1,7 @@
 const { RiskAssessment, Device } = require('../../models');
 const { runRuleEngine } = require('./ruleEngine');
 const { computeScore, scoreToLevel } = require('./scoringModel');
-const { escalateRisk } = require('./escalateRisk');
+const { escalateRisk, autoResolveClearedRisk } = require('./escalateRisk');
 const { triggerSos, SosAlreadyActiveError } = require('../sos/triggerSos');
 
 // Telemetry arrives frequently (every simulator/device tick); without
@@ -31,7 +31,7 @@ async function evaluateRisk(touristId, io, { force = false } = {}) {
     }
   }
 
-  const { score, factors } = await computeScore(touristId);
+  const { score, factors, explanation, locationStale, locationAgeMin } = await computeScore(touristId);
   const level = rule ? 'critical' : scoreToLevel(score);
 
   const riskAssessment = await RiskAssessment.create({
@@ -39,6 +39,9 @@ async function evaluateRisk(touristId, io, { force = false } = {}) {
     score,
     level,
     factors,
+    explanation,
+    locationStale,
+    locationAgeMin,
     ruleTriggered: Boolean(rule),
     ruleName: rule?.ruleName || null,
     evaluatedAt: new Date(),
@@ -47,6 +50,9 @@ async function evaluateRisk(touristId, io, { force = false } = {}) {
   let incident = null;
   if (level === 'high' || level === 'critical') {
     incident = await escalateRisk(riskAssessment, io);
+  } else if (!locationStale && !rule) {
+    // fresh position, no longer high: an old alert whose cause has passed can close itself
+    await autoResolveClearedRisk(touristId).catch((err) => console.error('[risk] auto-resolve:', err.message));
   }
 
   // Phase 11: a score-driven Critical (not already a rule-triggered SOS or

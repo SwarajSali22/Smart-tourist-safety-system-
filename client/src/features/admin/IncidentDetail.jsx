@@ -15,7 +15,8 @@ import { ProofBadge, ProofChecks } from '../../shared/components/ProofStatus.jsx
 import { useAuth } from '../../shared/auth/AuthContext.jsx';
 import { FRESH_LABEL, FRESH_VARIANT, freshnessOf, sourceOf } from '../../shared/utils/freshness.js';
 import { formatDateTime, label, timeAgo } from '../../shared/utils/format.js';
-import { SEVERITY_BADGE, STATUS_BADGE } from './Incidents.jsx';
+import { PRIORITY_BADGE, SEVERITY_BADGE, STATUS_BADGE } from './Incidents.jsx';
+import RiskExplain from '../../shared/components/RiskExplain.jsx';
 
 // Mirrors backend/src/services/incidents/lifecycle.js (the server is the authority and re-validates).
 const STAGES = ['open', 'in_progress', 'assigned', 'en_route', 'resolved', 'closed'];
@@ -52,12 +53,17 @@ function IncidentDetail() {
   const [verified, setVerified] = useState({});
   const [verifyingId, setVerifyingId] = useState(null);
   const [assigning, setAssigning] = useState(false);
+  const [reassigning, setReassigning] = useState(false);
   const [people, setPeople] = useState(null);
   const [assignee, setAssignee] = useState('');
+  const [evidence, setEvidence] = useState({ kind: 'link', title: '', value: '' });
+  const [risk, setRisk] = useState(null);
+  const [handover, setHandover] = useState(null); // read-only summary for whoever takes the case over
 
   const load = useCallback(() => {
     return api.get(`/incidents/${id}`)
       .then((d) => { setData(d); setError(''); })
+      .then(() => api.get(`/incidents/${id}/handover`).then((h) => setHandover(h.handover)).catch(() => setHandover(null)))
       .catch((e) => setError(e.status === 404 ? 'This incident does not exist (it may have been removed).' : e.message));
   }, [id]);
 
@@ -68,6 +74,12 @@ function IncidentDetail() {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); loadProofs(); }, [load, loadProofs]);
+
+  const touristId = data?.incident?.tourist?._id;
+  useEffect(() => {
+    if (!isAdmin || !touristId) return;
+    api.get(`/risk/${touristId}/history`).then((d) => setRisk(d.history?.[0] || null)).catch(() => setRisk(null));
+  }, [isAdmin, touristId, data?.incident?.status]);
   useOnReconnect(() => { load(); loadProofs(); });
 
   useEffect(() => {
@@ -88,7 +100,7 @@ function IncidentDetail() {
     }));
     setBusy(true);
     try {
-      await api.patch(`/incidents/${id}/status`, { status: to, ...(extra.note ? { note: extra.note } : {}), ...(extra.assignee ? { assignee: extra.assignee } : {}) });
+      await api.patch(`/incidents/${id}/status`, { status: to, expectedStatus: before.incident.status, ...(extra.note ? { note: extra.note } : {}), ...(extra.assignee ? { assignee: extra.assignee } : {}) });
       toast.success(`Incident is now ${label(to)}.`);
     } catch (err) {
       setData(before);
@@ -113,6 +125,34 @@ function IncidentDetail() {
       setNote(text);
       toast.error(`Couldn’t add the note: ${err.message || 'request failed'}.`);
     }
+  }
+
+  async function reassign(who) {
+    setBusy(true);
+    try {
+      await api.patch(`/incidents/${id}/assign`, { assignee: who });
+      toast.success('Incident reassigned.');
+    } catch (err) {
+      toast.error(`Couldn’t reassign: ${err.message || 'request failed'}.`);
+    } finally { setBusy(false); load(); loadProofs(); }
+  }
+
+  async function changePriority(priority) {
+    try {
+      await api.patch(`/incidents/${id}/priority`, { priority });
+      toast.success(`Priority set to ${label(priority)}.`);
+    } catch (err) { toast.error(`Couldn’t change the priority: ${err.message}`); }
+    load();
+  }
+
+  async function addEvidence(e) {
+    e.preventDefault();
+    try {
+      await api.post(`/incidents/${id}/evidence`, evidence);
+      setEvidence({ kind: evidence.kind, title: '', value: '' });
+      toast.success('Evidence added to the case.');
+    } catch (err) { toast.error(`Couldn’t add evidence: ${err.message}`); }
+    load();
   }
 
   async function openAssign() {
@@ -167,7 +207,9 @@ function IncidentDetail() {
       <p className="page-subtitle">
         <Badge variant={SEVERITY_BADGE[incident.severity]}>{label(incident.severity)}</Badge>{' '}
         <Badge variant={STATUS_BADGE[incident.status]}>{label(incident.status)}</Badge>{' '}
+        <Badge variant={PRIORITY_BADGE[incident.priority || 'normal']}>Priority: {label(incident.priority || 'normal')}</Badge>{' '}
         {overdue && <span className="badge badge--overdue">Overdue</span>}{' '}
+        {incident.escalatedAt && <span className="badge badge--escalated" title={incident.escalationReason || ''}>Escalated {timeAgo(incident.escalatedAt, now)}</span>}{' '}
         {tourist.isDemo && <Badge variant="info">Simulated</Badge>}{' '}
         · opened {timeAgo(incident.createdAt, now)} · <code>{String(incident._id).slice(-8)}</code>
       </p>
@@ -202,8 +244,26 @@ function IncidentDetail() {
               <MapPin size={14} aria-hidden="true" /> Open position in a map
             </a>
           )}
+          {isAdmin && ['assigned', 'en_route'].includes(incident.status) && (
+            <button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => { setReassigning(true); openAssign(); }}>Reassign…</button>
+          )}
+          {isAdmin && !['resolved', 'closed'].includes(incident.status) && (
+            <label className="filter filter--inline">
+              <span className="form-hint">Priority</span>
+              <select className="form-input" value={incident.priority || 'normal'} onChange={(e) => changePriority(e.target.value)} aria-label="Incident priority">
+                {['low', 'normal', 'high', 'urgent'].map((p) => <option key={p} value={p}>{label(p)}</option>)}
+              </select>
+            </label>
+          )}
           {next.length === 0 && <span className="form-hint">This incident is closed — no further actions.</span>}
         </div>
+        {data.metrics && (
+          <dl className="metric-row mt-4">
+            <div><dt>Time to acknowledge</dt><dd>{data.metrics.responseMinutes != null ? `${data.metrics.responseMinutes} min` : 'Not yet'}</dd></div>
+            <div><dt>Time to resolve</dt><dd>{data.metrics.resolutionMinutes != null ? `${data.metrics.resolutionMinutes} min` : 'Not yet'}</dd></div>
+            <div><dt>Opened</dt><dd>{formatDateTime(incident.createdAt)}</dd></div>
+          </dl>
+        )}
         {incident.assignedAdmin && <p className="form-hint mt-4">Assigned to <strong>{incident.assignedAdmin.name}</strong> ({incident.assignedAdmin.role})</p>}
         {incident.resolution && <p className="form-hint mt-4">Resolution note: {incident.resolution}</p>}
       </Card>
@@ -237,6 +297,54 @@ function IncidentDetail() {
               <dt>Email</dt><dd>{tourist.email || '—'}</dd>
               <dt>Phone</dt><dd>{tourist.phone || '—'}</dd>
             </dl>
+          </Card>
+
+          {handover && (
+            <Card title="Handover summary" className="mt-4">
+              <dl className="kv">
+                <dt>Held by</dt><dd>{handover.currentAssignee ? `${handover.currentAssignee.name} (${handover.currentAssignee.role})` : 'Nobody yet'}</dd>
+                <dt>Evidence</dt><dd>{handover.evidenceCount} item(s)</dd>
+                {handover.lastKnownLocation && (<><dt>Last position</dt><dd>{handover.lastKnownLocation.lat.toFixed(5)}, {handover.lastKnownLocation.lng.toFixed(5)}{handover.lastKnownLocation.lastSeen && <span className="form-hint"> · {timeAgo(handover.lastKnownLocation.lastSeen, now)}</span>}</dd></>)}
+              </dl>
+              <p className="form-hint mt-4">Assignment history</p>
+              {handover.assignments.length === 0 ? <p className="placeholder-text">Not assigned yet.</p> : (
+                <ol className="activity">
+                  {handover.assignments.map((a, i) => (
+                    <li key={i}><strong>{a.assignee || 'Assigned'}</strong> <span className="form-hint">by {a.by} · {formatDateTime(a.at)}</span>{a.note && <p className="activity__note">{a.note}</p>}</li>
+                  ))}
+                </ol>
+              )}
+            </Card>
+          )}
+
+          {isAdmin && risk && (
+            <Card title="Risk assessment" className="mt-4">
+              <RiskExplain assessment={risk} />
+            </Card>
+          )}
+
+          <Card title="Evidence" className="mt-4">
+            {(incident.evidence || []).length === 0 && <p className="placeholder-text">No evidence recorded. Add a link (photo, CCTV, report) or a written observation.</p>}
+            <ul className="evidence-list">
+              {(incident.evidence || []).map((ev, i) => (
+                <li key={i}>
+                  <strong>{ev.title}</strong>{' '}
+                  <span className="form-hint">{formatDateTime(ev.at)}</span>
+                  <p className="activity__note">{ev.kind === 'link' ? <a href={ev.value} target="_blank" rel="noreferrer noopener">{ev.value}</a> : ev.value}</p>
+                </li>
+              ))}
+            </ul>
+            <form onSubmit={addEvidence} className="auth-form mt-4">
+              <div className="evidence-form">
+                <select className="form-input" value={evidence.kind} onChange={(e) => setEvidence((v) => ({ ...v, kind: e.target.value }))} aria-label="Evidence type">
+                  <option value="link">Link</option><option value="text">Written note</option>
+                </select>
+                <input className="form-input" maxLength={140} placeholder="Title" value={evidence.title} onChange={(e) => setEvidence((v) => ({ ...v, title: e.target.value }))} aria-label="Evidence title" />
+              </div>
+              <textarea className="form-input" rows={2} maxLength={1000} placeholder={evidence.kind === 'link' ? 'https://…' : 'What was observed?'} value={evidence.value} onChange={(e) => setEvidence((v) => ({ ...v, value: e.target.value }))} aria-label="Evidence content" />
+              <div><button className="btn btn--ghost btn--sm" type="submit" disabled={!evidence.title.trim() || !evidence.value.trim()}>Add evidence</button></div>
+              <p className="form-hint">Stored as a reference only — files are not uploaded to this system.</p>
+            </form>
           </Card>
 
           <Card title="Device & position" className="mt-4">
@@ -294,11 +402,11 @@ function IncidentDetail() {
 
       <ConfirmDialog
         open={assigning}
-        title="Assign this incident"
+        title={reassigning ? 'Reassign this incident' : 'Assign this incident'}
         message="Choose who should handle it. They are notified immediately and the assignment is recorded in the activity history and the audit chain."
         confirmLabel="Assign"
-        onConfirm={() => { const who = assignee; setAssigning(false); move('assigned', { assignee: who }); }}
-        onCancel={() => setAssigning(false)}
+        onConfirm={() => { const who = assignee; setAssigning(false); if (reassigning) { setReassigning(false); reassign(who); } else move('assigned', { assignee: who }); }}
+        onCancel={() => { setAssigning(false); setReassigning(false); }}
       >
         <label className="form-label modal__form">
           Assign to

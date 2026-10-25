@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 /**
  * Accessible modal confirm. Focuses the dialog on open, closes on Escape or
@@ -18,6 +18,17 @@ function ConfirmDialog({
   children,
 }) {
   const ref = useRef(null);
+  // Stay mounted for the short exit animation (visual only: the action has already happened).
+  const [mounted, setMounted] = useState(open);
+  const [closing, setClosing] = useState(false);
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (open) { setMounted(true); setClosing(false); return undefined; }
+    setClosing(true);
+    const id = setTimeout(() => { setMounted(false); setClosing(false); }, 170);
+    return () => clearTimeout(id);
+  }, [open]);
+  /* eslint-enable react-hooks/set-state-in-effect */
   const titleId = useId();
   // Parents pass a fresh onCancel every render. Keep it in a ref so the effect below
   // runs only when the dialog opens/closes — otherwise every keystroke inside the
@@ -55,11 +66,11 @@ function ConfirmDialog({
     };
   }, [open]);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onCancel?.()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} ref={ref}>
+    <div className={`modal-backdrop${closing ? ' modal-backdrop--closing' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && onCancel?.()}>
+      <div className={`modal${closing ? ' modal--closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} ref={ref}>
         <h2 id={titleId} className="modal__title">{title}</h2>
         {message && <p className="modal__message">{message}</p>}
         {children}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
+import MapInteractions, { MAP_INTERACTION_OPTIONS } from './MapInteractions.jsx';
 import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
 import { divIcon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -11,7 +12,12 @@ const valid = (p) => p && Number.isFinite(p.lat) && Number.isFinite(p.lng) && Ma
 function Recenter({ point }) {
   const map = useMap();
   useEffect(() => {
-    if (valid(point)) map.setView([point.lat, point.lng], Math.max(map.getZoom(), 15), { animate: true });
+    if (!valid(point)) return;
+    // Zoom in on a freshly chosen point, but never yank the view back while the user is
+    // already looking at the pin (e.g. after dragging the map around or nudging the pin).
+    const zoom = map.getZoom();
+    if (zoom >= 13 && map.getBounds().contains([point.lat, point.lng])) return;
+    map.setView([point.lat, point.lng], Math.max(zoom, 15), { animate: true });
   }, [map, point?.lat, point?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }
@@ -37,7 +43,8 @@ function LocationPicker({ point, onPick, height = 260 }) {
 
   return (
     <div className="picker-map" style={{ height }}>
-      <MapContainer center={ok ? [point.lat, point.lng] : DEFAULT_CENTER} zoom={ok ? 15 : 4} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
+      <MapContainer center={ok ? [point.lat, point.lng] : DEFAULT_CENTER} zoom={ok ? 15 : 4} {...MAP_INTERACTION_OPTIONS} style={{ height: '100%', width: '100%' }}>
+        <MapInteractions />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

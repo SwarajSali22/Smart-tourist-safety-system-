@@ -282,7 +282,7 @@ function HelpCenters() {
   const showErr = (k) => touched[k] && errors[k];
 
   return (
-    <div className="page-stack">
+    <div className="app-page page-stack">
       <div>
         <h1 className="page-title">Help centers</h1>
         <p className="page-subtitle">Hospitals, police stations, pharmacies and other services tourists can reach. Tourists see the nearest active ones first.</p>

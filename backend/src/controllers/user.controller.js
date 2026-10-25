@@ -1,6 +1,7 @@
 const { User, Incident } = require('../models');
 const { hashPassword } = require('../services/auth.service');
 const { ACTIVE_STATUSES } = require('../services/incidents/lifecycle');
+const { logActivity } = require('../services/activity/logActivity');
 
 // ── GET /api/users/assignable  (admin) — who an incident can be assigned to ──
 async function listAssignable(req, res, next) {
@@ -28,6 +29,7 @@ async function createResponder(req, res, next) {
     const { name, email, password, phone } = req.body;
     if (await User.findOne({ email })) return res.status(409).json({ success: false, message: 'Email already registered' });
     const user = await User.create({ name, email, phone: phone || null, passwordHash: await hashPassword(password), role: 'responder' });
+    await logActivity({ req, action: 'user.create_responder', targetModel: 'User', targetId: user._id, summary: `Created responder ${user.name}` });
     return res.status(201).json({ success: true, user: { id: user._id, name: user.name, email: user.email, role: user.role } });
   } catch (err) {
     next(err);
@@ -49,6 +51,7 @@ async function updateResponder(req, res, next) {
     if (phone !== undefined) user.phone = phone || null;
     if (isActive !== undefined) user.isActive = isActive;
     await user.save();
+    await logActivity({ req, action: isActive === undefined ? 'user.update' : isActive ? 'user.reactivate' : 'user.deactivate', targetModel: 'User', targetId: user._id, summary: user.name });
     return res.json({ success: true, user: { id: user._id, name: user.name, email: user.email, phone: user.phone, role: user.role, isActive: user.isActive } });
   } catch (err) {
     next(err);

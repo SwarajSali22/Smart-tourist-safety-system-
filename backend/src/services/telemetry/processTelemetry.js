@@ -2,6 +2,7 @@ const { LocationPing, GeofenceEvent } = require('../../models');
 const { recordProof } = require('../blockchain/auditChain');
 const { evaluateGeofence } = require('../geofencing/checkGeofence');
 const { triggerSos, SosAlreadyActiveError } = require('../sos/triggerSos');
+const { findRelatedIncident, attachEvent } = require('../incidents/correlate');
 const { evaluateRisk } = require('../riskAssessment/evaluateRisk');
 
 function toSafeDevice(device) {
@@ -59,6 +60,20 @@ async function processTelemetry({ device, lat, lng, battery, accuracy, sosPresse
     if (event.zone?.type !== 'safe') {
       const geoDoc = await GeofenceEvent.findById(event._id);
       if (geoDoc) await recordProof('geofence_violation', 'GeofenceEvent', geoDoc);
+    }
+  }
+
+  // Correlation: entering a restricted/danger zone while the tourist already has an active incident nearby
+  // is recorded on that incident's timeline. The GeofenceEvent itself is untouched and no incident is
+  // created here (a danger zone still raises its own SOS below when there isn't one already).
+  if (device.tourist) {
+    for (const event of entered) {
+      if (event.zone?.type === 'safe') continue;
+      const related = await findRelatedIncident(device.tourist, { location: { lat, lng } });
+      if (related) {
+        const zoneName = event.zone?.name || 'a zone';
+        await attachEvent(related, { action: `Entered ${event.zone?.type} zone "${zoneName}"`, sourceModel: 'GeofenceEvent', sourceId: event._id });
+      }
     }
   }
 

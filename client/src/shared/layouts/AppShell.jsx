@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, MoreHorizontal, ShieldCheck, Siren, TriangleAlert, X } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { AlertsProvider, useAlerts } from '../alerts/AlertsContext.jsx';
 import AlertBell from '../alerts/AlertBell.jsx';
+import SyncStatus from '../offline/SyncStatus.jsx';
 import ConnectionStatus from '../components/ConnectionStatus.jsx';
 import { ThemeToggle } from '../theme/ThemeContext.jsx';
 import { NAV, ROLE_HOME, ROLE_TITLE } from '../navConfig.js';
@@ -66,6 +67,7 @@ function ZoneBanner() {
 function ShellInner() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const role = user.role;
   const { t } = useI18n();
   const items = NAV[role];
@@ -132,6 +134,7 @@ function ShellInner() {
           <Link to={ROLE_HOME[role]} className="app-topbar__brand">{ROLE_TITLE[role]}</Link>
           <div className="app-topbar__tools">
             {role === 'tourist' && <LanguageSwitcher />}
+            <SyncStatus />
             <ConnectionStatus />
             <AlertBell />
             <ThemeToggle />
@@ -143,7 +146,7 @@ function ShellInner() {
         <ZoneBanner />
 
         <main className="app-main" id="main" tabIndex={-1}>
-          <Outlet />
+          <div key={pathname} className="page-transition"><Outlet /></div>
         </main>
       </div>
 

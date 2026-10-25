@@ -37,3 +37,6 @@ export async function downloadServerCsv(path, filename) {
   }
   save(await res.blob(), filename);
 }
+
+/** Same authenticated download for any file the server builds (PDF, CSV…). */
+export const downloadServerFile = downloadServerCsv;

@@ -35,7 +35,7 @@ function TouristDetail() {
   const { tourist: t, profile, device, risk, riskHistory, incidents, geofenceEvents, safetyChecks, sos } = data;
 
   return (
-    <div className="page-stack">
+    <div className="app-page page-stack">
       {back}
       <h1 className="page-title">{t.name}</h1>
       <div className="badge-row">

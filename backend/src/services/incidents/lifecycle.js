@@ -3,6 +3,7 @@ const { recordProof } = require('../blockchain/auditChain');
 const { notifyUser } = require('../notifications/notify');
 const { getIo } = require('../realtime');
 const thresholds = require('../../config/thresholds');
+const { logActivity } = require('../activity/logActivity');
 
 /**
  * Incident lifecycle:  New → Acknowledged → Assigned → En Route → Resolved → Closed
@@ -53,6 +54,19 @@ function isOverdue(incident, now = Date.now()) {
   return now - new Date(last).getTime() > limit;
 }
 
+/**
+ * One place that pushes an updated incident to everyone allowed to see it: all admins, plus the
+ * assigned admin/responder in their personal room (responders are not in the 'admin' room), so notes,
+ * evidence and priority changes appear live on both sides instead of only after a refresh.
+ */
+function broadcastIncident(incident) {
+  const io = getIo();
+  if (!io || !incident) return;
+  io.to('admin').emit('incident:updated', incident);
+  const assignee = incident.assignedAdmin?._id || incident.assignedAdmin;
+  if (assignee) io.to(`user:${assignee}`).emit('incident:updated', incident);
+}
+
 async function validateAssignee(assigneeId) {
   const user = await User.findById(assigneeId).select('role isActive name').lean();
   if (!user || user.isActive === false || !['admin', 'responder'].includes(user.role)) {
@@ -63,13 +77,17 @@ async function validateAssignee(assigneeId) {
 
 /**
  * Moves an incident to `to`.
- * @param {{ id: string, to: string, actor: {id: string, role: string}, note?: string, assignee?: string }} args
+ * @param {{ id: string, to: string, actor: {id: string, role: string}, note?: string, assignee?: string, expectedStatus?: string }} args
  */
-async function transitionIncident({ id, to, actor, note, assignee }) {
+async function transitionIncident({ id, to, actor, note, assignee, expectedStatus }) {
   const incident = await Incident.findById(id);
   if (!incident) throw new LifecycleError(404, 'Incident not found');
 
   const from = incident.status;
+  // Stale-screen guard: a client may say which status it was looking at; if someone else already moved it, refuse.
+  if (expectedStatus && expectedStatus !== from) {
+    throw new LifecycleError(409, `This incident is now ${LABEL[from]} (it was changed by someone else) — refresh and try again`);
+  }
   if (!Object.prototype.hasOwnProperty.call(LABEL, to)) throw new LifecycleError(400, `Unknown status: ${to}`);
   if (from === to) return { incident, changed: false }; // idempotent: already there
 
@@ -86,6 +104,7 @@ async function transitionIncident({ id, to, actor, note, assignee }) {
     assigneeUser = await validateAssignee(assigneeId);
     set.assignedAdmin = assigneeId;
     set.assignedAt = now;
+    if (!incident.firstAssignedAdmin) { set.firstAssignedAdmin = assigneeId; set.firstAssignedAt = now; }
   }
   if (to === 'resolved') {
     set.resolvedAt = now;
@@ -105,6 +124,11 @@ async function transitionIncident({ id, to, actor, note, assignee }) {
   const updated = await Incident.findOneAndUpdate({ _id: id, status: from }, { $set: set, $push: { timeline: entry } }, { new: true });
   if (!updated) throw new LifecycleError(409, 'This incident was just changed by someone else — refresh and try again');
 
+  await logActivity({
+    actor: actor.id, role: actor.role, action: `incident.${to}`, targetModel: 'Incident', targetId: id,
+    summary: `${LABEL[from]} → ${LABEL[to]}`, metadata: { from, to, ...(assigneeUser ? { assignee: set.assignedAdmin } : {}) },
+  });
+
   // ── keep the linked SOS event in step ──
   let sosEvent = null;
   if (updated.sourceRef?.refModel === 'SOSEvent') {
@@ -117,7 +141,11 @@ async function transitionIncident({ id, to, actor, note, assignee }) {
         { new: true }
       );
       // Clear the device's emergency flag now that the SOS is closed.
-      if (sosEvent?.device) await Device.findByIdAndUpdate(sosEvent.device, { emergencyMode: false, status: 'active' });
+      if (sosEvent?.device) {
+        const dev = await Device.findById(sosEvent.device).select('lastSeen').lean();
+        const live = dev?.lastSeen && now.getTime() - new Date(dev.lastSeen).getTime() <= thresholds.device.staleMs;
+        await Device.findByIdAndUpdate(sosEvent.device, { emergencyMode: false, status: live ? 'active' : 'inactive' });
+      }
     } else {
       sosEvent = await SOSEvent.findById(updated.sourceRef.refId);
     }
@@ -167,14 +195,116 @@ async function transitionIncident({ id, to, actor, note, assignee }) {
   return { incident: updated, sosEvent, changed: true };
 }
 
+const REASSIGNABLE = ['assigned', 'en_route'];
+
+/**
+ * Moves an already-assigned incident to a different responder/admin without changing its status.
+ * Recorded in the timeline and the activity log; the original assignment proof stays verifiable.
+ */
+async function reassignIncident({ id, actor, assignee, note }) {
+  const incident = await Incident.findById(id);
+  if (!incident) throw new LifecycleError(404, 'Incident not found');
+  if (!REASSIGNABLE.includes(incident.status)) throw new LifecycleError(409, 'Only an incident that is already assigned can be reassigned');
+  if (String(incident.assignedAdmin) === String(assignee)) throw new LifecycleError(409, 'That person is already assigned');
+  const to = await validateAssignee(assignee);
+  const now = new Date();
+  const set = { assignedAdmin: assignee, assignedAt: now };
+  if (!incident.firstAssignedAdmin) { set.firstAssignedAdmin = incident.assignedAdmin; set.firstAssignedAt = incident.assignedAt || now; }
+  const entry = {
+    at: now, actor: actor.id, actorLabel: actor.role, action: `Reassigned to ${to.name}`,
+    metadata: { from: String(incident.assignedAdmin), assignee, assigneeName: to.name, ...(note ? { note } : {}) },
+  };
+  const updated = await Incident.findOneAndUpdate(
+    { _id: id, status: incident.status, assignedAdmin: incident.assignedAdmin }, { $set: set, $push: { timeline: entry } }, { new: true }
+  );
+  if (!updated) throw new LifecycleError(409, 'This incident was just changed by someone else — refresh and try again');
+  await logActivity({ actor: actor.id, role: actor.role, action: 'incident.reassign', targetModel: 'Incident', targetId: id, summary: `Reassigned to ${to.name}`, metadata: { assignee } });
+  await notifyUser(assignee, {
+    type: 'incident_update', title: 'Incident assigned to you', message: 'Open the incident to respond.', severity: 'warning',
+    link: `${to.role === 'responder' ? '/responder' : '/admin'}/incidents/${updated._id}`, payload: { incident: updated._id, tourist: String(updated.tourist) },
+    dedupeKey: `incident-assign:${updated._id}:${assignee}:${now.getTime()}`,
+  });
+  await updated.populate('tourist', 'name email isDemo');
+  await updated.populate('assignedAdmin', 'name role');
+  const io = getIo();
+  if (io) {
+    io.to('admin').emit('incident:updated', updated);
+    io.to(`user:${assignee}`).emit('incident:updated', updated);
+    if (incident.assignedAdmin) io.to(`user:${incident.assignedAdmin}`).emit('incident:updated', updated);
+  }
+  return updated;
+}
+
+/** Adds evidence as a described reference (link or text) to the incident and its timeline. */
+async function addEvidence({ id, actor, kind, title, value }) {
+  const at = new Date();
+  const updated = await Incident.findByIdAndUpdate(id, {
+    $push: {
+      evidence: { kind, title, value, addedBy: actor.id, at },
+      timeline: { at, actor: actor.id, actorLabel: actor.role, action: 'Evidence added', metadata: { kind, title } },
+    },
+  }, { new: true }).populate('tourist', 'name email isDemo');
+  if (!updated) throw new LifecycleError(404, 'Incident not found');
+  await logActivity({ actor: actor.id, role: actor.role, action: 'incident.evidence', targetModel: 'Incident', targetId: id, summary: `Evidence added: ${title}` });
+  broadcastIncident(updated);
+  return updated;
+}
+
+/** Changes the priority (how urgently to act), recorded in the timeline. */
+async function setPriority({ id, actor, priority }) {
+  const incident = await Incident.findById(id).select('priority status').lean();
+  if (!incident) throw new LifecycleError(404, 'Incident not found');
+  if (incident.priority === priority) return Incident.findById(id).populate('tourist', 'name email isDemo');
+  const updated = await Incident.findByIdAndUpdate(id, {
+    $set: { priority },
+    $push: { timeline: { at: new Date(), actor: actor.id, actorLabel: actor.role, action: `Priority ${incident.priority} → ${priority}`, metadata: { from: incident.priority, to: priority } } },
+  }, { new: true }).populate('tourist', 'name email isDemo');
+  await logActivity({ actor: actor.id, role: actor.role, action: 'incident.priority', targetModel: 'Incident', targetId: id, summary: `Priority → ${priority}` });
+  broadcastIncident(updated);
+  return updated;
+}
+
+/**
+ * Escalates one active, high-priority incident that nobody has acknowledged (or that has stayed
+ * unresolved far too long). Done at most once per incident; the original timestamps are untouched.
+ */
+async function escalateIncident(incident, reason) {
+  const now = new Date();
+  const updated = await Incident.findOneAndUpdate(
+    { _id: incident._id, escalatedAt: null, status: { $in: ACTIVE_STATUSES } },
+    {
+      $set: { escalatedAt: now, escalationReason: reason, priority: 'urgent' },
+      $push: { timeline: { at: now, actor: null, actorLabel: 'system', action: 'Escalated', metadata: { reason } } },
+    },
+    { new: true }
+  );
+  if (!updated) return null;
+  await recordProof('incident_escalated', 'Incident', updated);
+  await logActivity({ actor: null, role: 'system', action: 'incident.escalate', targetModel: 'Incident', targetId: updated._id, summary: reason });
+  const { notifyAdmins } = require('../notifications/notify');
+  await notifyAdmins({
+    type: 'incident_update', title: 'Incident escalated', message: reason, severity: 'critical',
+    link: `/admin/incidents/${updated._id}`, payload: { incident: updated._id, tourist: String(updated.tourist) },
+    dedupeKey: `incident-escalated:${updated._id}`,
+  });
+  await updated.populate('tourist', 'name email isDemo');
+  await updated.populate('assignedAdmin', 'name role');
+  const io = getIo();
+  if (io) {
+    io.to('admin').emit('incident:updated', updated);
+    if (updated.assignedAdmin?._id) io.to(`user:${updated.assignedAdmin._id}`).emit('incident:updated', updated);
+  }
+  return updated;
+}
+
 /** Appends a free-text note to the activity history (does not change the status). */
 async function addIncidentNote({ id, actor, note }) {
   const entry = { at: new Date(), actor: actor.id, actorLabel: actor.role, action: 'Note', metadata: { note } };
   const updated = await Incident.findByIdAndUpdate(id, { $push: { timeline: entry } }, { new: true })
     .populate('tourist', 'name email isDemo');
   if (!updated) throw new LifecycleError(404, 'Incident not found');
-  getIo()?.to('admin').emit('incident:updated', updated);
+  broadcastIncident(updated);
   return updated;
 }
 
-module.exports = { transitionIncident, addIncidentNote, isOverdue, LifecycleError, ALLOWED, LABEL, ACTIVE_STATUSES };
+module.exports = { broadcastIncident, transitionIncident, addIncidentNote, reassignIncident, addEvidence, setPriority, escalateIncident, isOverdue, LifecycleError, ALLOWED, LABEL, ACTIVE_STATUSES };

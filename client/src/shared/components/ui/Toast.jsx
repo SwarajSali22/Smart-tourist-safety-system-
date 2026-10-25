@@ -14,7 +14,11 @@ export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
   const idRef = useRef(0);
 
-  const dismiss = useCallback((id) => setToasts((ts) => ts.filter((t) => t.id !== id)), []);
+  // Mark as leaving first so it can fade out, then remove it.
+  const dismiss = useCallback((id) => {
+    setToasts((ts) => ts.map((t) => (t.id === id ? { ...t, leaving: true } : t)));
+    setTimeout(() => setToasts((ts) => ts.filter((t) => t.id !== id)), 170);
+  }, []);
 
   const push = useCallback(
     (variant, message, opts = {}) => {
@@ -49,7 +53,7 @@ export function ToastProvider({ children }) {
           return (
             <div
               key={t.id}
-              className={`toast toast--${t.variant}`}
+              className={`toast toast--${t.variant}${t.leaving ? ' toast--leaving' : ''}`}
               role={urgent ? 'alert' : 'status'}
               aria-live={urgent ? 'assertive' : 'polite'}
             >
