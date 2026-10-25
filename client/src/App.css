@@ -51,8 +51,8 @@ a { color: var(--color-link); }
 .landing__logo {
   display: inline-flex; align-items: center; justify-content: center;
   width: 48px; height: 48px; border-radius: 14px; color: #fff;
-  background: linear-gradient(135deg, var(--color-primary), #7c73f0);
-  box-shadow: 0 4px 14px rgba(79,70,229,.35);
+  background: var(--accent-grad);
+  box-shadow: 0 4px 14px var(--accent-glow);
 }
 .landing__lead { color: var(--color-text-muted); font-size: 1.05rem; margin: 0; }
 .landing__features { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
@@ -67,8 +67,8 @@ a { color: var(--color-link); }
   align-items: center;
   justify-content: center;
   background:
-    radial-gradient(1100px 500px at 15% -10%, rgba(79,70,229,.12), transparent 60%),
-    radial-gradient(900px 500px at 100% 110%, rgba(79,70,229,.08), transparent 55%),
+    radial-gradient(1100px 500px at 15% -10%, color-mix(in srgb, var(--color-primary) 14%, transparent), transparent 60%),
+    radial-gradient(900px 500px at 100% 110%, color-mix(in srgb, var(--accent-2) 10%, transparent), transparent 55%),
     var(--color-bg);
   padding: 24px 16px;
 }
@@ -275,8 +275,8 @@ textarea.form-input { resize: vertical; }
   width: 32px; height: 32px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   border-radius: 9px; color: #fff;
-  background: linear-gradient(135deg, var(--color-primary), #7c73f0);
-  box-shadow: 0 2px 6px rgba(79,70,229,.35);
+  background: var(--accent-grad);
+  box-shadow: 0 2px 6px var(--accent-glow);
 }
 .app-sidebar__close { display: none; }
 .app-nav { flex: 1; padding: 14px 10px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }

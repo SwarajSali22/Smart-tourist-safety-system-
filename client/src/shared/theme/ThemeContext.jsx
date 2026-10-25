@@ -8,7 +8,7 @@ function initialTheme() {
     const saved = localStorage.getItem('theme');
     if (saved === 'light' || saved === 'dark') return saved;
   } catch { /* storage unavailable */ }
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return 'dark'; // first visit: dark (matches the inline script in index.html); the toggle saves a choice
 }
 
 export function ThemeProvider({ children }) {

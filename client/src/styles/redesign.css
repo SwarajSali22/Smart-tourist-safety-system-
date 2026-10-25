@@ -1,0 +1,76 @@
+/* Phase 2 — visual redesign: modern minimalism + bento grid + command-center, restrained glass.
+   Colours, radii and glass come from tokens.css; this file only adds layout/finish rules.
+   Loaded before responsive.css so the Phase 1 mobile rules keep winning on phones. */
+
+/* ── Brand chips: a dark glyph on the bright accent gradient keeps contrast ───── */
+:root[data-theme='dark'] .app-brand__logo,
+:root[data-theme='dark'] .landing__logo,
+:root[data-theme='dark'] .copilot-empty__icon,
+:root[data-theme='dark'] .copilot-avatar:not(.copilot-avatar--user) { color: #06101d; }
+
+/* ── Surfaces ───────────────────────────────────────────────────────────────────── */
+.card { box-shadow: var(--shadow-sm); }
+:root[data-theme='dark'] .card { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03), 0 6px 18px rgba(0, 0, 0, .22); }
+/* card titles read as quiet section labels so the data is what stands out */
+.card__title { font-size: 12.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--color-text-muted); }
+.btn--primary { box-shadow: 0 1px 2px color-mix(in srgb, var(--color-primary) 35%, transparent); }
+.btn--ghost:hover:not(:disabled) { border-color: var(--color-primary); }
+
+/* ── Command-center numbers ─────────────────────────────────────────────────────── */
+.stat-card__value, .risk-row__score, .public-stat__value { font-variant-numeric: tabular-nums; }
+.stat-card__label { color: var(--color-text); }
+.page-title { letter-spacing: -.025em; }
+
+/* ── Status clarity: red is reserved for SOS / critical; the accent is always blue ── */
+.sos-banner { box-shadow: 0 2px 12px color-mix(in srgb, var(--color-danger) 40%, transparent); }
+.attention { border-left-width: 6px; }
+.app-link--active { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 22%, transparent); }
+
+/* Stat-tile accent bars: red / amber / green only carry meaning on the dashboard (SOS / open / devices).
+   Everywhere else the bar is the neutral accent, so red never appears on something that isn't an alert. */
+.app-page .stats-grid .stat-card::before,
+.app-page .stats-grid > .stat-link .stat-card::before { background: var(--color-primary); }
+.app-page:has(> .dashboard-grid) .stats-grid > .stat-link:nth-child(2) .stat-card::before { background: var(--color-danger); }
+.app-page:has(> .dashboard-grid) .stats-grid > .stat-link:nth-child(3) .stat-card::before { background: var(--color-warning); }
+.app-page:has(> .dashboard-grid) .stats-grid > .stat-link:nth-child(4) .stat-card::before { background: var(--color-success); }
+
+/* White-on-red surfaces use the solid red so SOS text meets 4.5:1 contrast in the dark theme too */
+.sos-banner, .btn--danger, .bell__count, .badge--overdue, .attention__count, .attention__icon--sos,
+.app-tab--sos .app-tab__icon { background-color: var(--color-danger-solid); }
+
+/* ── Bento grid: admin dashboard on wide screens ────────────────────────────────── */
+@media (min-width: 1100px) {
+  .app--admin .app-page { max-width: 1360px; }
+  .app--admin .dashboard-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+  .app--admin .dashboard-grid > .dash-map          { grid-column: span 8; }
+  .app--admin .dashboard-grid > :nth-child(2)      { grid-column: span 4; }
+  .app--admin .dashboard-grid > :nth-child(3)      { grid-column: span 5; }
+  .app--admin .dashboard-grid > :nth-child(4)      { grid-column: span 7; }
+  /* the risk board sits beside the map: it scrolls inside its tile instead of stretching the row */
+  .app--admin .dashboard-grid > :nth-child(2) .card__body { max-height: 392px; overflow-y: auto; }
+}
+
+/* ── Stat tiles stretch to fill the row (phones keep their own 2-column rule) ───── */
+@media (min-width: 721px) {
+  .stats-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+}
+.tourist-status-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.tourist-sections    { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+
+/* ── Glass: floating layers only, solid when backdrop-filter is unsupported ─────── */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .app-bottom,
+  .map-legend, .map-fs-btn, .picker-map__hint, .selected-panel,
+  .layers__menu, .bell__panel, .user-menu__panel, .sync__panel {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  }
+  .map-legend, .map-fs-btn, .picker-map__hint, .layers__menu, .bell__panel, .user-menu__panel, .sync__panel { border-color: var(--glass-border); }
+  .modal-backdrop { -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+}
+
+/* ── AI Copilot: the one place glass is a feature, kept quiet ───────────────────── */
+.copilot-panel { background: linear-gradient(180deg, var(--color-surface), var(--color-surface-2)); border-color: var(--glass-border); }
+.copilot-composer { background: color-mix(in srgb, var(--color-surface) 92%, transparent); }
+.copilot-chip { border-color: color-mix(in srgb, var(--color-primary) 22%, transparent); }

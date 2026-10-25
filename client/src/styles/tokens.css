@@ -2,11 +2,12 @@
    Light values on :root, dark overrides on :root[data-theme='dark']. */
 /* ── Design tokens ──────────────────────────────────────────────────────────── */
 :root {
-  --color-primary:      #4f46e5;
-  --color-primary-dk:   #4338ca;
-  --color-primary-soft: #eef2ff;
+  --color-primary:      #0369a1;
+  --color-primary-dk:   #075985;
+  --color-primary-soft: #e6f3fb;
   --color-danger:       #dc2626;
   --color-danger-dk:    #b91c1c;
+  --color-danger-solid: #dc2626; /* fill behind white text (SOS banner, alert counts): 4.8:1 in both themes */
   --color-danger-soft:  #fef2f2;
   --color-danger-border:#fecaca;
   --color-success:      #16a34a;
@@ -19,7 +20,7 @@
   --color-neutral:      #64748b;
   --color-neutral-soft: #f1f4f8;
   --color-neutral-text: #475467;
-  --color-bg:           #f6f8fb;
+  --color-bg:           #f3f6fa;
   --color-surface:      #ffffff;
   --color-surface-2:    #f6f8fb;
   --color-border:       #e5e9f0;
@@ -27,7 +28,7 @@
   --color-text:         #1a2233;
   --color-text-muted:   #596273;
   --color-placeholder:  #6b7686;
-  --color-link:         #4338ca;
+  --color-link:         #075985;
   --sidebar-w:          228px;
   --radius:             10px;
   --radius-sm:          7px;
@@ -36,6 +37,16 @@
   --shadow:             0 1px 3px rgba(16,24,40,.08), 0 4px 12px rgba(16,24,40,.04);
   --shadow-lg:          0 8px 24px rgba(16,24,40,.10), 0 2px 6px rgba(16,24,40,.06);
   --overlay:            rgba(16,24,40,.45);
+
+  /* accent family (one source for gradients / highlights) */
+  --accent-2:           #0891b2;
+  --accent-grad:        linear-gradient(135deg, var(--color-primary), var(--accent-2));
+  --accent-glow:        rgba(3,105,161,.28);
+
+  /* glass: translucent surface for floating panels only (topbar, map overlays, popovers, copilot composer) */
+  --glass-bg:           rgba(255,255,255,.86);
+  --glass-border:       rgba(16,24,40,.10);
+  --glass-blur:         10px;
 
   /* spacing scale */
   --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
@@ -54,9 +65,9 @@
 }
 
 :root[data-theme='dark'] {
-  --color-primary:      #818cf8;
-  --color-primary-dk:   #a5b4fc;
-  --color-primary-soft: #26285a;
+  --color-primary:      #38bdf8;
+  --color-primary-dk:   #7dd3fc;
+  --color-primary-soft: #0f2b44;
   --color-danger:       #ef4444;
   --color-danger-dk:    #fca5a5;
   --color-danger-soft:  #3b1618;
@@ -69,20 +80,24 @@
   --color-warning-soft: #33260a;
   --color-warning-border:#6b4e10;
   --color-neutral:      #94a3b8;
-  --color-neutral-soft: #232b3a;
+  --color-neutral-soft: #1c2840;
   --color-neutral-text: #b4bdcc;
-  --color-bg:           #0f1420;
-  --color-surface:      #171e2d;
-  --color-surface-2:    #1d2638;
-  --color-border:       #2a3447;
-  --color-border-strong:#3a465c;
-  --color-text:         #e7ebf3;
-  --color-text-muted:   #a3aec2;
-  --color-placeholder:  #8895ab;
-  --color-link:         #a5b4fc;
+  --color-bg:           #0b1220;
+  --color-surface:      #121b2d;
+  --color-surface-2:    #192438;
+  --color-border:       #22304a;
+  --color-border-strong:#31435f;
+  --color-text:         #e6ecf5;
+  --color-text-muted:   #9db0c9;
+  --color-placeholder:  #8497b3;
+  --color-link:         #7dd3fc;
   --shadow-sm:          0 1px 2px rgba(0,0,0,.4);
   --shadow:             0 1px 3px rgba(0,0,0,.4), 0 4px 12px rgba(0,0,0,.25);
   --shadow-lg:          0 8px 24px rgba(0,0,0,.5);
-  --overlay:            rgba(0,0,0,.6);
+  --overlay:            rgba(2,6,14,.62);
+  --accent-2:           #22d3ee;
+  --accent-glow:        rgba(56,189,248,.22);
+  --glass-bg:           rgba(18,27,45,.84);
+  --glass-border:       rgba(148,176,214,.16);
 }
 

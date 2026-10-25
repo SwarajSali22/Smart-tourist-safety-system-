@@ -12,6 +12,10 @@
 
 .app-main img, .app-main video, .app-main canvas { max-width: 100%; }
 
+/* Leaflet's panes and controls use z-index up to 1000; keeping them inside the map's own stacking
+   context stops them drawing over the sticky topbar and the mobile tab bar. */
+.map-container, .picker-map, .trip-card__map, .copilot-map { isolation: isolate; }
+
 @media (max-width: 720px) {
   /* ── Top bar: keep the tools on one line down to 320px ── */
   .app-topbar { gap: var(--space-2); }
