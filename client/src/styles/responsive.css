@@ -1,0 +1,81 @@
+/* Phase 1 — mobile-friendliness fixes only. Loaded after every other stylesheet; it adjusts sizing and
+   positioning for small screens and does not change colours, typography or component styling. */
+
+/* Mobile browsers' collapsing toolbars make 100vh taller than the visible area; dvh tracks it. */
+@supports (height: 100dvh) {
+  .app, .auth-page, .spinner-fullpage, body { min-height: 100dvh; }
+  .app-sidebar { height: 100dvh; }
+  .map-container--full { height: 100dvh; width: 100vw; }
+  .copilot-panel { height: clamp(460px, calc(100dvh - 230px), 760px); }
+  .modal { max-height: 90dvh; }
+}
+
+.app-main img, .app-main video, .app-main canvas { max-width: 100%; }
+
+@media (max-width: 720px) {
+  /* ── Top bar: keep the tools on one line down to 320px ── */
+  .app-topbar { gap: var(--space-2); }
+  .app-topbar__brand { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .app-topbar__tools { flex-shrink: 0; margin-left: 0; gap: 0; }
+
+  /* ── Popovers anchored to mid-bar buttons would run off the left edge: pin them to the viewport ── */
+  .bell__panel, .sync__panel {
+    position: fixed; left: 12px; right: 12px; top: calc(var(--topbar-h) + 8px);
+    width: auto; max-height: calc(100dvh - var(--topbar-h) - var(--bottom-nav-h) - 24px);
+  }
+  .user-menu__panel { max-width: calc(100vw - 24px); }
+
+  /* ── Bottom tabs: long Hindi / Marathi labels truncate instead of overflowing ── */
+  .app-tab { min-width: 0; }
+  .app-tab > span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── Touch targets (~44px) ── */
+  .icon-btn { width: 44px; height: 44px; }
+  .btn { min-height: 44px; }
+  .btn--sm { min-height: 40px; }
+  .segmented__btn, .th-sort { min-height: 40px; }
+  .lang-switch select { min-height: 40px; font-size: 16px; }
+  .user-menu__btn { min-width: 44px; min-height: 44px; justify-content: center; }
+  .switch::after { content: ''; position: absolute; inset: -9px -4px; } /* 44px tap area, same look */
+
+  /* ── iOS zooms the page when a focused field is under 16px ── */
+  .form-input, .search-box input, .form-input--sm, .filter .form-input,
+  .filter--date .form-input, select.form-input, textarea.form-input { font-size: 16px; }
+  .form-input, .search-box input { min-height: 44px; }
+
+  /* ── Forms, filters and toolbars use the full width ── */
+  .search-box { max-width: none; flex-basis: 100%; }
+  .table-export { margin-left: 0; }
+  .filter-row .form-input, .filter-row select { flex: 1 1 140px; min-width: 0; }
+  .filter--date .form-input { width: 100%; min-width: 0; }
+  .metric-row { gap: var(--space-4); }
+  .detail-actions .btn { flex: 1 1 auto; }
+
+  /* ── Dialogs: full-width, scrollable, actions stay reachable above the keyboard ── */
+  .modal-backdrop { padding: 8px; align-items: flex-end; }
+  .modal { max-width: none; }
+  .modal__actions { flex-wrap: wrap; }
+  .modal__actions .btn { flex: 1 1 auto; }
+
+  /* ── Maps ── */
+  .livemap__panel .tourist-list { max-height: 260px; }
+  .replay { width: 100%; }
+  .replay input[type='range'] { flex: 1 1 120px; min-width: 0; }
+  .layers__menu { max-width: calc(100vw - 32px); }
+  .map-fs-btn { width: 44px; height: 44px; }
+
+  /* ── Copilot: the composer must stay above the tab bar and the keyboard ── */
+  .copilot-panel { min-height: 380px; }
+  .copilot-input { font-size: 16px; }
+}
+
+@media (max-width: 400px) {
+  /* 320–400px phones: the page title is hidden in favour of the tools; the tab bar still names the page */
+  .app-topbar__brand { display: none; }
+  .app-topbar__tools { margin-left: auto; }
+  .app-page { padding-left: 12px; padding-right: 12px; }
+  .stats-grid { gap: 8px; }
+  .stat-card { padding: 14px 10px 14px 16px; }
+  .stat-card__value { font-size: 1.4rem; }
+  .login-panel, .auth-card { padding-left: 16px; padding-right: 16px; }
+}

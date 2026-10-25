@@ -39,6 +39,7 @@ import './App.css';
 import './styles/screens.css';
 import './styles/features.css';
 import './styles/motion.css';
+import './styles/responsive.css';
 
 function App() {
   return (
