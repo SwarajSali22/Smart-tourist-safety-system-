@@ -232,6 +232,11 @@ async function toolGetIncident(ctx, input) {
     sos: sos ? { source: sos.source, status: sos.status, location: sos.location, triggeredAt: iso(sos.createdAt), acknowledgedAt: iso(sos.acknowledgedAt) } : null,
     timeline: (o.timeline || []).slice(-20).map((t) => ({ at: iso(t.at), by: t.actorLabel, action: t.action, note: t.metadata?.note ? String(t.metadata.note).slice(0, 200) : undefined, relatedEvent: t.metadata?.correlated ? t.metadata.sourceModel : undefined })),
     timelineEntriesTotal: (o.timeline || []).length,
+    // Automated safety alert (missed check-ins): the deterministic context captured at escalation. The severity was set by rules.
+    safetyAlert: (() => {
+      const c = (o.timeline || []).find((e) => e.metadata?.kind === 'automated_safety_alert')?.metadata;
+      return c ? { isSos: false, severityByRules: c.severity, rule: c.severityRule, lastKnownLocation: c.lastKnownLocation, locationIsStale: c.locationIsStale, zonesAtLastPosition: c.zonesAtLastPosition, zonesNearby: c.zonesNearby, reasons: c.reasons, events: c.timeline } : undefined;
+    })(),
     auditProofs: proofs.map((p) => ({ event: p.eventType, sequenceNo: p.chainRef?.sequenceNo, at: iso(p.createdAt) })),
     risk: await riskOf(o.tourist?._id || o.tourist),
   };

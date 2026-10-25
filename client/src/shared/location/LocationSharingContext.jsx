@@ -56,8 +56,8 @@ export function LocationSharingProvider({ children }) {
     : reporter.error;
 
   const value = useMemo(
-    () => ({ sharing: enabled, setShare, status, error, lastSentAt: reporter.lastSentAt, permission }),
-    [enabled, setShare, status, error, reporter.lastSentAt, permission]
+    () => ({ sharing: enabled, setShare, status, error, lastSentAt: reporter.lastSentAt, permission, otherDevice: reporter.otherDevice }),
+    [enabled, setShare, status, error, reporter.lastSentAt, permission, reporter.otherDevice]
   );
 
   return <LocationSharingContext.Provider value={value}>{children}</LocationSharingContext.Provider>;

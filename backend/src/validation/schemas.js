@@ -17,6 +17,7 @@ const registerSchema = z.object({
   email: z.string().trim().toLowerCase().email('must be a valid email').max(200),
   password: z.string().min(8, 'must be at least 8 characters').max(128),
   phone: phone.optional().or(z.literal('')),
+  invite: z.string().trim().min(20).max(100).optional(),
 });
 const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email('must be a valid email').max(200),
@@ -96,6 +97,8 @@ const deviceRegisterSchema = z.object({
   tourist: objectId,
   deviceId: z.string().trim().regex(/^[A-Za-z0-9_-]{3,40}$/, 'must be 3–40 letters, digits, - or _').optional(),
   isSimulated: z.boolean().optional(),
+  // Must be true to replace a tourist's working phone device (which stops their phone GPS being recorded).
+  replacePhone: z.boolean().optional(),
 });
 const telemetrySchema = z.object({
   lat: z.number().min(-90).max(90),

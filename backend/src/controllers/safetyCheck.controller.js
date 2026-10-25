@@ -1,7 +1,10 @@
-const { SafetyCheck, User } = require('../models');
+const { SafetyCheck, User, Device, Incident } = require('../models');
 const env = require('../config/env');
 const { escalateUnsafeResponse } = require('../services/safetyCheck/escalate');
 const { evaluateRisk } = require('../services/riskAssessment/evaluateRisk');
+const thresholds = require('../config/thresholds');
+const { describeSignal, latestCheckInAt } = require('../services/safetyCheck/workflow');
+const { logActivity } = require('../services/activity/logActivity');
 
 // ── POST /api/safety-checks/trigger  (admin only) ─────────────────────────────
 async function triggerCheck(req, res, next) {
@@ -50,10 +53,25 @@ async function respondToCheck(req, res, next) {
       return res.status(409).json({ success: false, message: 'Already responded' });
     }
 
+    if (safetyCheck.stage === 'overdue') {
+      return res.status(404).json({ success: false, message: 'Safety check not found' });
+    }
+    const wasEscalated = safetyCheck.stage === 'escalated';
+    const responseMs = safetyCheck.requestedAt ? Date.now() - new Date(safetyCheck.requestedAt).getTime() : null;
     safetyCheck.respondedAt = new Date();
     safetyCheck.response = response;
     safetyCheck.message = message || null;
+    if (safetyCheck.episodeAt) {
+      // Answering ends the silence episode: a pending escalation is cancelled (the sweep ignores answered checks).
+      safetyCheck.stage = 'closed'; safetyCheck.closedAt = new Date(); safetyCheck.closedReason = 'check_in';
+    }
     await safetyCheck.save();
+    await logActivity({ req, action: 'safety.check_in_response', targetModel: 'SafetyCheck', targetId: safetyCheck._id,
+      summary: `Tourist answered "${response}"${responseMs != null ? ` ${Math.round(responseMs / 60000)} min after the request` : ''}${wasEscalated ? ' (after the admin alert was raised)' : ''}`,
+      metadata: { response, wasEscalated, responseMs } });
+    if (wasEscalated && safetyCheck.incident) {
+      await Incident.updateOne({ _id: safetyCheck.incident }, { $push: { timeline: { at: new Date(), actorLabel: 'tourist', action: `Tourist confirmed "${response}" after the automated alert`, metadata: { response } } } });
+    }
 
     let incident = null;
     if (response === 'unsafe') {
@@ -81,7 +99,7 @@ async function respondToCheck(req, res, next) {
 // ── GET /api/safety-checks/mine  (tourist only) ───────────────────────────────
 async function getMyCheck(req, res, next) {
   try {
-    const safetyCheck = await SafetyCheck.findOne({ tourist: req.user.id })
+    const safetyCheck = await SafetyCheck.findOne({ tourist: req.user.id, stage: { $ne: 'overdue' } })
       .sort({ scheduledAt: -1 })
       .limit(1);
     return res.json({
@@ -90,6 +108,9 @@ async function getMyCheck(req, res, next) {
       config: {
         intervalMinutes: env.safetyCheckIntervalMinutes,
         responseWindowMinutes: env.safetyCheckResponseWindowMinutes,
+        overdueMinutes: thresholds.safetyWorkflow.overdueMs / 60000,
+        requestMinutes: thresholds.safetyWorkflow.requestMs / 60000,
+        escalateMinutes: thresholds.safetyWorkflow.escalateMs / 60000,
       },
     });
   } catch (err) {
@@ -116,4 +137,35 @@ async function listChecks(req, res, next) {
   }
 }
 
-module.exports = { triggerCheck, respondToCheck, getMyCheck, listChecks };
+// ── GET /api/safety-checks/status  (admin only) ───────────────────────────────
+// One row per tracked tourist: last GPS and last check-in kept separate, a status that never calls an old fix "live",
+// and the open silence episode (if any). `socketConnected` is shown apart from location freshness on purpose.
+async function monitorStatus(req, res, next) {
+  try {
+    const io = req.app.get('io');
+    const devices = await Device.find({ tourist: { $ne: null }, status: { $ne: 'lost' } })
+      .populate('tourist', 'name email isDemo').select('deviceId type isSimulated lastSeen lastLocation battery tourist').lean();
+    const rows = [];
+    for (const d of devices) {
+      if (!d.tourist) continue;
+      const [lastCheckInAt, episode] = await Promise.all([
+        latestCheckInAt(d.tourist._id),
+        SafetyCheck.findOne({ tourist: d.tourist._id, episodeAt: { $ne: null }, stage: { $in: ['overdue', 'requested', 'escalated'] }, closedAt: null })
+          .select('stage overdueAt requestedAt escalatedAt delivery incident context.severity').lean(),
+      ]);
+      const sig = describeSignal({ lastSeen: d.lastSeen, hasLocation: d.lastLocation?.lat != null, lastCheckInAt });
+      rows.push({
+        tourist: d.tourist, deviceId: d.deviceId, deviceType: d.type, isSimulated: d.isSimulated,
+        ...sig, lastLocation: d.lastLocation?.lat != null ? d.lastLocation : null, battery: d.battery,
+        socketConnected: Boolean(io?.sockets?.adapter?.rooms?.get(`user:${d.tourist._id}`)?.size),
+        episode: episode || null,
+      });
+    }
+    const w = thresholds.safetyWorkflow;
+    return res.json({ success: true, rows, thresholds: { overdueMinutes: w.overdueMs / 60000, requestMinutes: w.requestMs / 60000, escalateMinutes: w.escalateMs / 60000 } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { triggerCheck, respondToCheck, getMyCheck, listChecks, monitorStatus };

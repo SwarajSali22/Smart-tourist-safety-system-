@@ -10,6 +10,8 @@ const { notFoundHandler, errorHandler } = require('./middleware/errorHandler');
 const app = express();
 
 app.disable('x-powered-by');
+// Behind a hosting provider's proxy, set TRUST_PROXY=1 so rate limits and logs see each visitor's IP, not the proxy's.
+if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY);
 app.use(helmet()); // security headers (JSON API: no inline content to allow)
 // Only the configured front-end origin(s) get CORS headers; any other origin gets none.
 const allowedOrigins = env.clientOrigin.split(',').map((o) => o.trim()).filter(Boolean);

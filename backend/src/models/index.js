@@ -17,6 +17,8 @@ const HelpCenter = require('./HelpCenter');
 const ActivityLog = require('./ActivityLog');
 const Trip = require('./Trip');
 const IdempotencyKey = require('./IdempotencyKey');
+const TouristGroup = require('./TouristGroup');
+const GroupInvitation = require('./GroupInvitation');
 
 module.exports = {
   User,
@@ -35,4 +37,6 @@ module.exports = {
   ActivityLog,
   Trip,
   IdempotencyKey,
+  TouristGroup,
+  GroupInvitation,
 };

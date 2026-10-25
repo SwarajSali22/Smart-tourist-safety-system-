@@ -23,12 +23,14 @@ function TouristProfile() {
   const [error, setError] = useState('');
   const [savingContacts, setSavingContacts] = useState(false);
   const [savingTrip, setSavingTrip] = useState(false);
+  const [groupName, setGroupName] = useState('');
   const [contacts, setContacts] = useState([]);
   const [itinerary, setItinerary] = useState([]);
 
   useEffect(() => {
     api.get('/tourists/me')
       .then((data) => {
+        setGroupName(data.profile.group?.name || '');
         setContacts(data.profile.emergencyContacts || []);
         setItinerary((data.profile.itinerary || []).map((i) => ({ ...i, arrivalAt: toDateInput(i.arrivalAt), departureAt: toDateInput(i.departureAt) })));
       })
@@ -89,6 +91,7 @@ function TouristProfile() {
           <div className="profile-field"><dt className="profile-field__label">{t('profile.email')}</dt><dd>{user?.email}</dd></div>
           <div className="profile-field"><dt className="profile-field__label">{t('profile.phone')}</dt><dd>{user?.phone || '—'}</dd></div>
           <div className="profile-field"><dt className="profile-field__label">{t('profile.role')}</dt><dd>{user?.role}</dd></div>
+          {groupName && <div className="profile-field"><dt className="profile-field__label">Tour group</dt><dd>{groupName}</dd></div>}
         </dl>
       </Card>
 

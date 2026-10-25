@@ -8,6 +8,7 @@ import { useToast } from '../../shared/components/ui/Toast.jsx';
 import Card from '../../shared/components/ui/Card.jsx';
 import Badge from '../../shared/components/ui/Badge.jsx';
 import DataTable from '../../shared/components/ui/DataTable.jsx';
+import ConfirmDialog from '../../shared/components/ui/ConfirmDialog.jsx';
 import { SkeletonRows } from '../../shared/components/ui/Skeleton.jsx';
 import { label, timeAgo } from '../../shared/utils/format.js';
 import { FRESH_LABEL, FRESH_VARIANT, freshnessOf, sourceOf } from '../../shared/utils/freshness.js';
@@ -28,6 +29,10 @@ function Devices() {
   const [error, setError] = useState('');
 
   const [selectedTourist, setSelectedTourist] = useState('');
+  const [deviceKind, setDeviceKind] = useState('simulator'); // 'simulator' | 'wristband'
+  const [confirmPhone, setConfirmPhone] = useState(null);    // tourist whose working phone device would be replaced
+  const [removeTarget, setRemoveTarget] = useState(null);    // a never-reported device the admin may remove
+  const [removing, setRemoving] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [formError, setFormError] = useState('');
   const [issuedKey, setIssuedKey] = useState(null); // { deviceId, apiKey }
@@ -66,24 +71,57 @@ function Devices() {
 
   const unassignedTourists = tourists.filter((t) => !t.device || t.deviceType === 'phone');
 
-  async function handleRegister(e) {
+  // Registering a device for a tourist whose own phone is already being tracked would replace the phone device,
+  // after which the phone's GPS is no longer recorded. That must be a deliberate choice, never a side effect.
+  function handleRegister(e) {
     e.preventDefault();
     setFormError('');
-    if (!selectedTourist) {
+    const chosen = tourists.find((t) => t._id === selectedTourist);
+    if (!chosen) {
       setFormError('Choose a tourist to assign the device to.');
       return;
     }
+    if (chosen.deviceType === 'phone') {
+      setConfirmPhone(chosen);
+      return;
+    }
+    register(false);
+  }
+
+  async function register(replacePhone) {
     setRegistering(true);
     try {
-      const data = await api.post('/devices', { tourist: selectedTourist });
+      const data = await api.post('/devices', {
+        tourist: selectedTourist,
+        isSimulated: deviceKind !== 'wristband',
+        ...(replacePhone ? { replacePhone: true } : {}),
+      });
       setIssuedKey({ deviceId: data.device.deviceId, apiKey: data.apiKey });
       setSelectedTourist('');
+      setConfirmPhone(null);
       toast.success(`Device ${data.device.deviceId} registered.`);
       await Promise.all([loadDevices(), loadTourists()]);
     } catch (err) {
+      setConfirmPhone(null);
       setFormError(err.message || 'Failed to register device');
     } finally {
       setRegistering(false);
+    }
+  }
+
+  async function removeUnused() {
+    if (!removeTarget) return;
+    setRemoving(true);
+    try {
+      await api.delete(`/devices/${encodeURIComponent(removeTarget.deviceId)}`);
+      toast.success(`Device ${removeTarget.deviceId} removed.`);
+      setRemoveTarget(null);
+      await Promise.all([loadDevices(), loadTourists()]);
+    } catch (err) {
+      toast.error(err.message || 'Could not remove the device.');
+      setRemoveTarget(null);
+    } finally {
+      setRemoving(false);
     }
   }
 
@@ -115,6 +153,13 @@ function Devices() {
     { key: 'battery', header: 'Battery', sortValue: (d) => d.battery, render: (d) => (typeof d.battery === 'number' ? `${d.battery}%` : '—') },
     { key: 'lastSeen', header: 'Last seen', sortValue: (d) => (d.lastSeen ? new Date(d.lastSeen).getTime() : null), render: (d) => (d.lastSeen ? <time dateTime={d.lastSeen} title={new Date(d.lastSeen).toLocaleString()}>{timeAgo(d.lastSeen, now)}</time> : '—') },
     { key: 'location', header: 'Last location', render: (d) => (d.lastLocation?.lat != null ? `${d.lastLocation.lat.toFixed(4)}, ${d.lastLocation.lng.toFixed(4)}` : '—') },
+    {
+      key: 'actions', header: 'Actions',
+      // Only a device that has never reported anything can be removed (the server enforces this too).
+      render: (d) => (!d.lastSeen && !d.emergencyMode
+        ? <button type="button" className="btn btn--ghost btn--sm" onClick={() => setRemoveTarget(d)}>Remove</button>
+        : null),
+    },
   ];
 
   const CSV = {
@@ -151,18 +196,50 @@ function Devices() {
             <select className="form-input" value={selectedTourist} onChange={(e) => setSelectedTourist(e.target.value)}>
               <option value="">Select a tourist without a wristband…</option>
               {unassignedTourists.map((t) => (
-                <option key={t._id} value={t._id}>{t.name} ({t.email}){t.deviceType === 'phone' ? ' — phone GPS only' : ''}</option>
+                <option key={t._id} value={t._id}>{t.name} ({t.email}){t.deviceType === 'phone' ? ' — tracked by their phone (registering replaces it)' : ''}</option>
               ))}
             </select>
             {!loading && unassignedTourists.length === 0 && (
               <span className="form-hint">Every registered tourist already has a device.</span>
             )}
           </label>
+          <label className="form-label">
+            Device type
+            <select className="form-input" value={deviceKind} onChange={(e) => setDeviceKind(e.target.value)}>
+              <option value="simulator">Simulator — for testing, not real hardware</option>
+              <option value="wristband">Real wristband</option>
+            </select>
+          </label>
+          <p className="form-hint">
+            A tourist’s own phone does not need registering: it appears here automatically, as a Phone, once they turn on “Share my location”.
+            Only register a simulator or wristband for a tourist who is not using their phone for tracking.
+          </p>
           <button className="btn btn--primary" type="submit" disabled={registering}>
             {registering ? 'Registering…' : 'Register device'}
           </button>
         </form>
       </Card>
+
+      <ConfirmDialog
+        open={Boolean(confirmPhone)}
+        title="Replace this tourist’s phone tracking?"
+        message={confirmPhone ? `${confirmPhone.name} is currently tracked by their own phone. Registering a ${deviceKind === 'wristband' ? 'wristband' : 'simulator'} replaces it, and their phone’s GPS will no longer be recorded or shown on the map.` : ''}
+        confirmLabel="Replace phone tracking"
+        danger
+        busy={registering}
+        onConfirm={() => register(true)}
+        onCancel={() => setConfirmPhone(null)}
+      />
+      <ConfirmDialog
+        open={Boolean(removeTarget)}
+        title={removeTarget ? `Remove ${removeTarget.deviceId}?` : 'Remove device'}
+        message={removeTarget ? `This device has never reported any data. Removing it lets ${removeTarget.tourist?.name || 'the tourist'}’s own phone GPS be recorded again. A device that has reported data cannot be removed.` : ''}
+        confirmLabel="Remove device"
+        danger
+        busy={removing}
+        onConfirm={removeUnused}
+        onCancel={() => setRemoveTarget(null)}
+      />
 
       <Card title="All devices" className="mt-4">
         {loading && <SkeletonRows rows={5} />}

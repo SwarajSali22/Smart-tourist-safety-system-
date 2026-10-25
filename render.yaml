@@ -1,0 +1,28 @@
+# Render Blueprint for the BACKEND only (Node + Express + Socket.IO + the safety scheduler).
+# Prepared, NOT deployed. Secrets are never stored here: every `sync: false` value is typed into the Render dashboard.
+# Serve the frontend (client/dist) from a static host; see docs/DEPLOYMENT.md.
+services:
+  - type: web
+    name: sts-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "1"
+      - key: MONGODB_URI
+        sync: false
+      - key: CLIENT_ORIGIN       # exact https origin of the frontend, e.g. https://sts.example.org
+        sync: false
+      - key: PUBLIC_APP_URL      # same address; enables invitation links
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: GEMINI_API_KEY      # optional (Copilot)
+        sync: false

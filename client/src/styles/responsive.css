@@ -12,6 +12,9 @@
 
 .app-main img, .app-main video, .app-main canvas { max-width: 100%; }
 
+/* Jumping to the SOS status must not leave it hidden under the sticky top bar + SOS banner (which wraps on phones). */
+.sos-status-anchor { scroll-margin-top: calc(var(--topbar-h) + 104px); }
+
 /* Leaflet's panes and controls use z-index up to 1000; keeping them inside the map's own stacking
    context stops them drawing over the sticky topbar and the mobile tab bar. */
 .map-container, .picker-map, .trip-card__map, .copilot-map { isolation: isolate; }
@@ -20,7 +23,11 @@
   /* ── Top bar: keep the tools on one line down to 320px ── */
   .app-topbar { gap: var(--space-2); }
   .app-topbar__brand { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .app-topbar__tools { flex-shrink: 0; margin-left: 0; gap: 0; }
+  /* A real gap (not 0) so the language picker never touches the Live/Offline pill; the pill gets its own side margin. */
+  .app-topbar__tools { flex-shrink: 0; margin-left: 0; gap: 6px; }
+  .app-topbar__tools .lang-switch { margin-right: 4px; min-width: 0; }
+  .app-topbar__tools .lang-switch select { max-width: 112px; padding-left: 6px; padding-right: 4px; text-overflow: ellipsis; }
+  .app-topbar__tools .conn { margin-inline: 2px; flex-shrink: 0; }
 
   /* ── Popovers anchored to mid-bar buttons would run off the left edge: pin them to the viewport ── */
   .bell__panel, .sync__panel {
@@ -76,10 +83,30 @@
 @media (max-width: 400px) {
   /* 320–400px phones: the page title is hidden in favour of the tools; the tab bar still names the page */
   .app-topbar__brand { display: none; }
-  .app-topbar__tools { margin-left: auto; }
+  .app-topbar__tools { margin-left: auto; gap: 2px; }
+  .app-topbar__tools .lang-switch select { max-width: 92px; }
   .app-page { padding-left: 12px; padding-right: 12px; }
   .stats-grid { gap: 8px; }
   .stat-card { padding: 14px 10px 14px 16px; }
   .stat-card__value { font-size: 1.4rem; }
   .login-panel, .auth-card { padding-left: 16px; padding-right: 16px; }
 }
+
+/* Invitation QR: big enough to scan from another phone's screen, never wider than the card. */
+.invite-qr-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+.invite-qr { width: 288px; max-width: 100%; height: auto !important; background: #fff; border-radius: var(--radius-sm); }
+
+/* ── Tour groups page: compact controls that wrap instead of overflowing ── */
+.group-create { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.group-create .form-input { flex: 1 1 220px; min-width: 0; }
+.group-settings { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.group-settings .form-label { flex: 0 1 180px; min-width: 0; }
+.group-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.group-head__actions, .invite-row__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.invite-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) 0; border-top: 1px solid var(--color-border); }
+.invite-row:first-child { border-top: 0; }
+.member-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.member { padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-sm); min-width: 0; }
+.member__head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.member__name { font-weight: 600; overflow-wrap: anywhere; }
+.member__line { margin: 2px 0 0; overflow-wrap: anywhere; }

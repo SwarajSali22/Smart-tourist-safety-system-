@@ -12,10 +12,19 @@ import UserMenu from './UserMenu.jsx';
 import { LocationSharingProvider } from '../location/LocationSharingContext.jsx';
 import { I18nProvider, LanguageSwitcher, useI18n } from '../i18n/I18nContext.jsx';
 
+/** Brings the SOS status card into view (the banner sticks to the top; the status sits below the big SOS button). */
+function scrollToSosStatus() {
+  const el = document.getElementById('sos-status');
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  if (el) el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  else window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+}
+
 /** Red banner while an SOS is open: admins see all active SOS, a tourist sees their own. */
 function SosBanner({ role }) {
   const { activeSos } = useAlerts();
   const { t } = useI18n();
+  const { pathname } = useLocation();
   if (activeSos.length === 0) return null;
 
   if (role === 'tourist') {
@@ -27,7 +36,12 @@ function SosBanner({ role }) {
           <strong>{sos.status === 'acknowledged' ? t('shell.sos.acknowledged') : t('shell.sos.active')}</strong>{' '}
           {sos.status === 'acknowledged' ? t('shell.sos.responding') : t('shell.sos.alerted')}
         </span>
-        <Link to="/tourist/sos" className="btn btn--sm sos-banner__btn">{t('shell.sos.view')}</Link>
+        {/* Already on the SOS page the link's target is the current route, so the router would do nothing: scroll to the status instead. */}
+        <Link
+          to="/tourist/sos#sos-status"
+          className="btn btn--sm sos-banner__btn"
+          onClick={(e) => { if (pathname === '/tourist/sos') { e.preventDefault(); scrollToSosStatus(); } }}
+        >{t('shell.sos.view')}</Link>
       </div>
     );
   }

@@ -20,6 +20,7 @@ export const NAV = {
     { to: '/admin/analytics',  label: 'Analytics',    icon: BarChart3 },
     { to: '/admin/blockchain', label: 'Audit proofs', icon: Link2 },
     { to: '/admin/help-centers', label: 'Help centers', icon: LifeBuoy },
+    { to: '/admin/groups',     label: 'Tour groups',  icon: Users },
     { to: '/admin/team',       label: 'Team',         icon: UsersRound },
     { to: '/admin/health',     label: 'System health', icon: Activity },
     { to: '/admin/copilot',    label: 'AI Copilot',   icon: Sparkles },

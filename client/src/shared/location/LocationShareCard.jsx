@@ -7,22 +7,23 @@ import { useLocationSharing } from './LocationSharingContext.jsx';
 
 const BADGE_VARIANT = {
   off: 'neutral', waiting: 'info', sharing: 'success', denied: 'danger', unavailable: 'warning',
-  timeout: 'warning', unsupported: 'neutral', wristband: 'info', error: 'warning',
+  timeout: 'warning', unsupported: 'neutral', wristband: 'info', tracker_blocked: 'danger', error: 'warning',
 };
 
 /** "Share my location" switch + live status, for the tourist Home page. */
 function LocationShareCard() {
   const { t, timeAgo } = useI18n();
-  const { sharing, setShare, status, lastSentAt } = useLocationSharing();
+  const { sharing, setShare, status, lastSentAt, error, otherDevice } = useLocationSharing();
   const now = useNow(5000);
   const switchId = useId();
 
   let detail;
   if (status === 'sharing') detail = lastSentAt ? t('loc.detail.sharingWhen', { when: timeAgo(lastSentAt, now) }) : t('loc.detail.sharing');
   else if (status === 'wristband') detail = t('loc.detail.wristband');
+  else if (status === 'tracker_blocked') detail = t('loc.detail.trackerBlocked', { device: otherDevice?.deviceId || '' });
   else if (status === 'waiting') detail = t('loc.detail.waiting');
   else if (status === 'off') detail = t('loc.detail.off');
-  else if (status === 'error') detail = t('loc.detail.error');
+  else if (status === 'error') detail = error ? `${t('loc.detail.error')} ${error}` : t('loc.detail.error');
   else detail = t(`geo.${status}`); // denied | unavailable | timeout | unsupported
 
   return (

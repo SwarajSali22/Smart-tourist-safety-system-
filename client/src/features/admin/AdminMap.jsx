@@ -21,6 +21,14 @@ const SPEEDS = [0.5, 1, 2, 4];
 
 const touristIdOf = (d) => d.tourist?._id || d.tourist;
 
+// Why a device has no position, in plain words (never a guess at a location).
+function noLocationReason(d) {
+  const src = sourceOf(d);
+  if (src === 'Phone') return 'phone, waiting for its first GPS report';
+  if (src === 'Simulator') return d.lastSeen ? 'simulator, no position sent' : 'simulator that has never reported';
+  return d.lastSeen ? 'no position sent' : 'has never reported';
+}
+
 function AdminMap() {
   const toast = useToast();
   const now = useNow(15000);
@@ -143,6 +151,9 @@ function AdminMap() {
   const hasHeat = (heatPoints || []).length > 0;
   const filtersOn = Object.values(filters).some(Boolean) || query.trim();
 
+  // Honest "why is nobody on the map" list: devices that exist but have never reported a position.
+  const unlocated = devices.filter((d) => d.lastLocation?.lat == null);
+
   function fitAll() {
     const pts = list.filter((d) => d.lastLocation?.lat != null).map((d) => [d.lastLocation.lat, d.lastLocation.lng]);
     if (pts.length === 0) { toast.info('No tourists with a known position to fit.'); return; }
@@ -182,6 +193,14 @@ function AdminMap() {
       <p className="page-subtitle">Every tourist, coloured by risk. Grey means the data is stale or offline. Select one for details, their route and a replay.</p>
 
       {loadError && <ErrorState compact message={loadError} onRetry={loadDevices} />}
+
+      {unlocated.length > 0 && (
+        <p className="notice notice--warn" role="status">
+          {unlocated.length} of {devices.length} tracked {devices.length === 1 ? 'tourist has' : 'tourists have'} no location yet, so {unlocated.length === 1 ? 'they are' : 'they are'} not on the map:{' '}
+          {unlocated.slice(0, 5).map((d) => `${d.tourist?.name || d.deviceId} (${noLocationReason(d)})`).join('; ')}
+          {unlocated.length > 5 ? `; +${unlocated.length - 5} more` : ''}. A check-in answer does not include a position.
+        </p>
+      )}
 
       <div className="livemap">
         <div className="livemap__map">
@@ -232,6 +251,7 @@ function AdminMap() {
             onSelectDevice={select}
             flyTo={flyTo}
             fit={fit}
+            autoFit
             showZones={layers.zones}
             showDevices={layers.tourists}
             height={560}

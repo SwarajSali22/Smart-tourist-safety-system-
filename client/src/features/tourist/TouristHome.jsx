@@ -41,12 +41,17 @@ function TouristHome() {
     const onCheckPrompt = (c) => setCheck(c);
     const onCheckResponse = ({ safetyCheck }) => setCheck(safetyCheck);
     const onRisk = (r) => setRisk(r);
+    // The server pushes the tourist's own device whenever it records a position, so this card follows the phone's
+    // first report (which creates the phone device) instead of staying on "not linked" from when the page opened.
+    const onLocation = (d) => setDevice(d);
+    socket.on('location:update', onLocation);
     socket.on('sos:triggered', onSos);
     socket.on('sos:updated', onSos);
     socket.on('safetycheck:prompt', onCheckPrompt);
     socket.on('safetycheck:response', onCheckResponse);
     socket.on('risk:updated', onRisk);
     return () => {
+      socket.off('location:update', onLocation);
       socket.off('sos:triggered', onSos);
       socket.off('sos:updated', onSos);
       socket.off('safetycheck:prompt', onCheckPrompt);
@@ -80,7 +85,7 @@ function TouristHome() {
     : [];
   const factorNames = factors.map(([k]) => tOr(`factor.${k}`, k)).join(', ');
   const ruleName = risk?.ruleName ? tOr(`rule.${risk.ruleName}`, englishLabel(risk.ruleName)) : '';
-  const sourceName = device?.type === 'phone' ? t('home.device.phone') : t('home.device.wristband');
+  const sourceName = device?.type === 'phone' ? t('home.device.phone') : device?.isSimulated ? t('home.device.simulator') : t('home.device.wristband');
 
   return (
     <div className="app-page">
@@ -125,7 +130,7 @@ function TouristHome() {
 
         <Card title={t('home.device.title')}>
           <div className="status-row">
-            <span>{device ? sourceName : t('home.device.wristband')}</span>
+            <span>{device ? sourceName : t('home.device.none')}</span>
             {device === undefined ? <Badge variant="neutral">{t('common.loading')}</Badge> : device ? (
               <Badge variant={DEVICE_BADGE[device.status] || 'neutral'}>{label(device.status)}</Badge>
             ) : (
@@ -135,7 +140,7 @@ function TouristHome() {
           <p className="placeholder-text mt-4">
             {device
               ? t('home.device.lastSeen', { id: device.deviceId, when: device.lastSeen ? timeAgo(device.lastSeen, now) : t('time.never') })
-              : device === null ? t('home.device.ask') : ''}
+              : device === null ? t('home.device.askPhone') : ''}
           </p>
         </Card>
 

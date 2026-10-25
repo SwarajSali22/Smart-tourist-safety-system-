@@ -4,6 +4,7 @@ const { evaluateGeofence } = require('../geofencing/checkGeofence');
 const { triggerSos, SosAlreadyActiveError } = require('../sos/triggerSos');
 const { findRelatedIncident, attachEvent } = require('../incidents/correlate');
 const { evaluateRisk } = require('../riskAssessment/evaluateRisk');
+const { warnApproachingZone } = require('../geofencing/approachWarning');
 
 function toSafeDevice(device) {
   const obj = device.toObject ? device.toObject() : { ...device };
@@ -53,6 +54,12 @@ async function processTelemetry({ device, lat, lng, battery, accuracy, sosPresse
       // active" is expected, not an error, once the first trigger lands.
       if (!(err instanceof SosAlreadyActiveError)) throw err;
     }
+  }
+
+  // Early warning before the boundary (never blocks the pipeline; skipped for poor/unknown GPS accuracy).
+  if (device.tourist && entered.length === 0) {
+    await warnApproachingZone({ touristId: device.tourist, lat, lng, accuracy })
+      .catch((err) => console.error('[approachWarning]', err.message));
   }
 
   // Audit trail: entering a non-safe zone is a recorded violation.

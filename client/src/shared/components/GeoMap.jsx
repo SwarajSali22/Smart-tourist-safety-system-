@@ -129,6 +129,21 @@ function FlyTo({ target }) {
   return null;
 }
 
+// Fit the map to the located devices ONCE, the first time any of them appear. The default centre is arbitrary, so
+// without this a tourist anywhere else is drawn correctly but off-screen and looks "missing". It never runs again,
+// so it cannot fight a viewer's own pan/zoom; later updates just move the existing markers.
+function AutoFitOnce({ points }) {
+  const map = useMap();
+  const done = useRef(false);
+  useEffect(() => {
+    if (done.current || points.length === 0) return;
+    done.current = true;
+    if (points.length === 1) map.setView(points[0], Math.max(map.getZoom(), 14));
+    else map.fitBounds(points, { padding: [48, 48], maxZoom: 16 });
+  }, [points, map]);
+  return null;
+}
+
 // Fit the map to a set of points whenever `fit.key` changes ("Fit all" button).
 function FitBounds({ fit }) {
   const map = useMap();
@@ -161,6 +176,7 @@ function InvalidateOn({ dep }) {
  *  - `trails` → [{ id, points: [[lat,lng]…] }] polylines; `replayPoint` → moving dot.
  *  - `heatPoints` → [{ lat, lng, weight }] incident density overlay.
  *  - `flyTo` → { lat, lng, key } smooth recenter; `fit` → { key, points } fit-all; `selectedDeviceId` highlights one device.
+ *  - `autoFit` fits the view to the located devices once, when the first ones appear.
  *  - `showZones` / `showDevices` switch those layers off (the admin "Layers" menu).
  *  - `userPosition` → the viewer's own live location (distinct green marker).
  *  - `allowFullscreen` adds an expand button (Esc to exit); `showLegend` adds a text legend.
@@ -181,6 +197,7 @@ function GeoMap({
   onSelectDevice,
   flyTo,
   fit,
+  autoFit = false,
   showZones = true,
   showDevices = true,
   onMapClick,
@@ -225,6 +242,9 @@ function GeoMap({
         {focusPosition && <RecenterOnce position={focusPosition} zoom={zoom} />}
         {flyTo && <FlyTo target={flyTo} />}
         {fit && <FitBounds fit={fit} />}
+        {autoFit && !fit && !flyTo && !focusPosition && showDevices && (
+          <AutoFitOnce points={devices.filter((d) => d.lastLocation?.lat != null).map((d) => [d.lastLocation.lat, d.lastLocation.lng])} />
+        )}
         {onMapClick && <ClickCapture onMapClick={onMapClick} />}
 
         {showZones && zones.map((zone) => (

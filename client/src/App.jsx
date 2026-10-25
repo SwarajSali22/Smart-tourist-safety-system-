@@ -27,6 +27,7 @@ import HelpCenters       from './features/admin/HelpCenters.jsx';
 import Trips             from './features/admin/Trips.jsx';
 import SystemHealth      from './features/admin/SystemHealth.jsx';
 import Copilot           from './features/copilot/Copilot.jsx';
+import Groups            from './features/admin/Groups.jsx';
 
 import TouristHome       from './features/tourist/TouristHome.jsx';
 import TouristProfile    from './features/tourist/TouristProfile.jsx';
@@ -66,6 +67,7 @@ function App() {
           <Route path="tourists"  element={<TouristDirectory />} />
           <Route path="tourists/:id" element={<TouristDetail />} />
           <Route path="team" element={<Team />} />
+          <Route path="groups" element={<Groups />} />
           <Route path="help-centers" element={<HelpCenters />} />
           <Route path="trips" element={<Trips />} />
           <Route path="devices"   element={<Devices />} />

@@ -10,6 +10,22 @@ module.exports = {
     liveMs: 2 * MIN,      // ≤ 2 min  → live
     staleMs: 15 * MIN,    // ≤ 15 min → stale (shown grey), beyond → offline
   },
+  // Silence clock (services/safetyCheck/workflow.js). "Silence" = time since the last qualifying signal, i.e. the
+  // newer of the last GPS position received and the last confirmed check-in. Defaults 15 / 20 / 25 minutes.
+  safetyWorkflow: (() => {
+    const n = (v, d) => (Number(v) > 0 ? Number(v) : d);
+    let overdue = n(process.env.SAFETY_OVERDUE_MIN, 15);
+    let request = n(process.env.SAFETY_REQUEST_MIN, 20);
+    let escalate = n(process.env.SAFETY_ESCALATE_MIN, 25);
+    if (!(overdue < request && request < escalate)) { overdue = 15; request = 20; escalate = 25; } // misordered → defaults
+    return {
+      overdueMs: overdue * MIN,
+      requestMs: request * MIN,
+      escalateMs: escalate * MIN,
+      // Beyond this much silence the tourist is treated as off-duty (phone off overnight, trip over): no new alert.
+      maxMonitorMs: n(process.env.SAFETY_MAX_MONITOR_HOURS, 12) * 60 * MIN,
+    };
+  })(),
   // An incident that sits in a state this long is "overdue" (shown in the UI, never auto-actioned).
   incidentOverdueMs: {
     open: 2 * MIN,          // New, nobody has acknowledged it

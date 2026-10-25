@@ -4,7 +4,7 @@ const { notifyAdmins, notifyUser } = require('./notify');
 const TYPE_LABEL = {
   sos: 'SOS',
   geofence_violation: 'Zone violation',
-  no_response: 'Missed check-in',
+  no_response: 'Automated safety alert',
   risk_escalation: 'Risk escalation',
   other: 'Incident',
 };
@@ -22,7 +22,9 @@ async function onIncidentCreated(incident) {
   await notifyAdmins({
     type: incident.type === 'sos' ? 'sos_alert' : incident.type === 'risk_escalation' ? 'risk_escalation' : 'incident_update',
     title: `${isDemo ? '[Simulated] ' : ''}${label}: ${name}`,
-    message: `${label} (${incident.severity}) for ${name}. Open the incident to respond.`,
+    message: incident.type === 'no_response'
+      ? `${name} has not been heard from (no location or check-in). Automated alert, ${incident.severity} priority; this is not an SOS. Open it to review the last known position.`
+      : `${label} (${incident.severity}) for ${name}. Open the incident to respond.`,
     link: `/admin/incidents/${incident._id}`,
     severity: critical ? 'critical' : 'warning',
     payload: { incident: incident._id, tourist: incident.tourist },
@@ -80,7 +82,9 @@ async function onSafetyCheckCreated(check) {
   await notifyUser(check.tourist, {
     type: 'safety_check_prompt',
     title: 'Safety check-in',
-    message: 'Please open Check-ins and tell us you are safe.',
+    message: check.episodeAt
+      ? 'We have not received your location for a while. Please open Check-ins and confirm you are safe, and keep Share my location on.'
+      : 'Please open Check-ins and tell us you are safe.',
     link: '/tourist/checks',
     severity: 'warning',
     payload: { safetyCheck: check._id, tourist: check.tourist },

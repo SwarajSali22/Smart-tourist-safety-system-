@@ -5,6 +5,7 @@ const {
   getDevice,
   getTrail,
   ingestTelemetry,
+  removeUnusedDevice,
 } = require('../controllers/device.controller');
 const authenticate = require('../middleware/authenticate');
 const authorize = require('../middleware/authorize');
@@ -21,6 +22,8 @@ router.post('/', authenticate, authorize('admin'), validate(deviceRegisterSchema
 router.get('/', authenticate, authorize('admin'), listDevices);
 // Admin or the owning tourist: read one device
 router.get('/:deviceId', authenticate, getDevice);
+// Admin: remove a device that never reported anything (e.g. registered by mistake)
+router.delete('/:deviceId', authenticate, authorize('admin'), removeUnusedDevice);
 // Admin or the owning tourist: recent location history for the map trail
 router.get('/:deviceId/trail', authenticate, getTrail);
 // Device (simulator or ESP32): push a telemetry sample

@@ -125,14 +125,89 @@ describe('telemetry → geofence → auto-SOS → risk pipeline', () => {
       assert.equal(await models.Device.countDocuments({ tourist: tourist.user._id }), 1);
     });
 
-    test('an admin can assign a wristband to a phone-tracked tourist (replaces the phone device); a second one is refused', async () => {
+    test('an admin can replace a phone-tracked tourist phone device only on purpose (replacePhone); a second device is refused', async () => {
       const t = await h.createUser('tourist');
       await request(app).post('/api/tourists/me/location').set(auth(t.token)).send({ lat: 1, lng: 1 }).expect(200);
-      const r = await request(app).post('/api/devices').set(auth(admin.token)).send({ tourist: String(t.user._id) }).expect(201);
+      // Without confirmation nothing changes: the working phone device and its location survive.
+      const refused = await request(app).post('/api/devices').set(auth(admin.token)).send({ tourist: String(t.user._id) }).expect(409);
+      assert.equal(refused.body.code, 'phone_device_in_use');
+      const still = await models.Device.findOne({ tourist: t.user._id });
+      assert.equal(still.type, 'phone');
+      assert.equal(still.lastLocation.lat, 1);
+      // With explicit confirmation it is replaced, as before.
+      const r = await request(app).post('/api/devices').set(auth(admin.token)).send({ tourist: String(t.user._id), replacePhone: true }).expect(201);
       assert.equal(r.body.device.type, 'wristband');
       assert.ok(r.body.apiKey);
       assert.equal(await models.Device.countDocuments({ tourist: t.user._id }), 1);
-      await request(app).post('/api/devices').set(auth(admin.token)).send({ tourist: String(t.user._id) }).expect(409);
+      await request(app).post('/api/devices').set(auth(admin.token)).send({ tourist: String(t.user._id), replacePhone: true }).expect(409);
+      assert.ok(await models.ActivityLog.findOne({ action: 'device.replace_phone' }));
+    });
+
+    test('a simulator that never reported blocks phone GPS honestly, can be removed safely, and then the phone is recorded', async () => {
+      const t = await h.createUser('tourist');
+      const reg = await request(app).post('/api/devices').set(auth(admin.token)).send({ tourist: String(t.user._id) }).expect(201);
+      assert.equal(reg.body.device.isSimulated, true);
+      assert.equal(reg.body.device.status, 'inactive');
+      // The phone report is not recorded, and the answer says why (and that the assigned device never reported).
+      const blocked = await request(app).post('/api/tourists/me/location').set(auth(t.token)).send({ lat: 2, lng: 2 }).expect(200);
+      assert.equal(blocked.body.accepted, false);
+      assert.deepEqual(blocked.body.device, { deviceId: reg.body.device.deviceId, isSimulated: true, hasReported: false });
+      assert.equal(await models.LocationPing.countDocuments({ tourist: t.user._id }), 0);
+      // SOS cannot invent a location: a clear, actionable error (with the 112 reminder), nothing is created.
+      const sos = await request(app).post('/api/sos').set(auth(t.token)).send({}).expect(400);
+      assert.equal(sos.body.code, 'no_device_location');
+      assert.match(sos.body.message, /simulator/);
+      assert.match(sos.body.message, /112/);
+      assert.equal(await models.SOSEvent.countDocuments({ tourist: t.user._id }), 0);
+      // Only an admin may remove it, and only because it never reported anything.
+      await request(app).delete(`/api/devices/${reg.body.device.deviceId}`).set(auth(t.token)).expect(403);
+      await request(app).delete(`/api/devices/${reg.body.device.deviceId}`).set(auth(admin.token)).expect(200);
+      assert.equal(await models.Device.countDocuments({ tourist: t.user._id }), 0);
+      assert.equal((await models.TouristProfile.findOne({ user: t.user._id })).device, null);
+      assert.ok(await models.ActivityLog.findOne({ action: 'device.remove_unused' }));
+      // Now the phone is recorded against the right tourist and shows as a live phone device.
+      await new Promise((res) => setTimeout(res, 3100));
+      const ok = await request(app).post('/api/tourists/me/location').set(auth(t.token)).send({ lat: 3, lng: 3, accuracy: 9 }).expect(200);
+      assert.equal(ok.body.accepted, true);
+      const dev = await models.Device.findOne({ tourist: t.user._id });
+      assert.equal(dev.type, 'phone');
+      assert.equal(dev.isSimulated, false);
+      assert.equal(dev.status, 'active');
+      assert.deepEqual({ lat: dev.lastLocation.lat, lng: dev.lastLocation.lng }, { lat: 3, lng: 3 });
+      assert.ok(dev.lastSeen);
+      // The admin device list returns it with coordinates in lat/lng order, tied to the right tourist.
+      const list = await request(app).get('/api/devices').set(auth(admin.token)).expect(200);
+      const row = list.body.devices.find((d) => d.deviceId === dev.deviceId);
+      assert.equal(row.type, 'phone');
+      assert.equal(row.lastLocation.lat, 3);
+      assert.equal(row.lastLocation.lng, 3);
+      assert.equal(String(row.tourist._id), String(t.user._id));
+      // An SOS now has a real location to use.
+      await request(app).post('/api/sos').set(auth(t.token)).send({}).expect(201);
+      const ev = await models.SOSEvent.findOne({ tourist: t.user._id });
+      assert.equal(ev.location.lat, 3);
+    });
+
+    test('a device that has reported data can never be removed', async () => {
+      const t = await h.createUser('tourist');
+      await request(app).post('/api/tourists/me/location').set(auth(t.token)).send({ lat: 4, lng: 4 }).expect(200);
+      const phone = await models.Device.findOne({ tourist: t.user._id });
+      const r = await request(app).delete(`/api/devices/${phone.deviceId}`).set(auth(admin.token)).expect(409);
+      assert.equal(r.body.code, 'device_has_history');
+      assert.ok(await models.Device.findById(phone._id));
+    });
+
+    test('a phone report is stored against the signed-in tourist only, and other tourists cannot read the device list', async () => {
+      const a = await h.createUser('tourist');
+      const b = await h.createUser('tourist');
+      await request(app).post('/api/tourists/me/location').set(auth(a.token)).send({ lat: 5, lng: 6 }).expect(200);
+      await request(app).post('/api/tourists/me/location').set(auth(b.token)).send({ lat: 7, lng: 8 }).expect(200);
+      const da = await models.Device.findOne({ tourist: a.user._id });
+      const db = await models.Device.findOne({ tourist: b.user._id });
+      assert.notEqual(String(da._id), String(db._id));
+      assert.deepEqual([da.lastLocation.lat, da.lastLocation.lng], [5, 6]);
+      assert.deepEqual([db.lastLocation.lat, db.lastLocation.lng], [7, 8]);
+      await request(app).get('/api/devices').set(auth(a.token)).expect(403);
     });
   });
 

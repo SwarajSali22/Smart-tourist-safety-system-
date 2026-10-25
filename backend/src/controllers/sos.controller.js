@@ -7,9 +7,17 @@ async function createSos(req, res, next) {
   try {
     const device = await Device.findOne({ tourist: req.user.id });
     if (!device || device.lastLocation?.lat == null) {
+      // Never invent a position. Explain what is missing so the tourist can fix it (and knows to call 112).
+      const hint = !device
+        ? 'Your phone has not shared a location yet. Turn on "Share my location" on the Home page, wait until it says Sharing, then try again.'
+        : device.type === 'phone'
+          ? 'Your phone has not shared a location yet. Turn on "Share my location" on the Home page, wait until it says Sharing, then try again.'
+          : `The ${device.isSimulated ? 'simulator' : 'tracker'} assigned to your account (${device.deviceId}) has not reported a location, so your phone's GPS is not being recorded. Ask an administrator to remove it.`;
       return res.status(400).json({
         success: false,
-        message: 'No device location available yet — a linked device must have sent telemetry first',
+        code: 'no_device_location',
+        message: `No location is available for your SOS. ${hint} If you are in danger, call 112.`,
+        deviceType: device?.type || null,
       });
     }
 

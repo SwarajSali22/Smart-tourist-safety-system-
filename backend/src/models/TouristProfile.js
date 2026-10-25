@@ -40,6 +40,9 @@ const touristProfileSchema = new mongoose.Schema(
       type: [itineraryItemSchema],
       default: [],
     },
+    // Tour group this tourist joined through an invitation (null = registered without one).
+    group: { type: mongoose.Schema.Types.ObjectId, ref: 'TouristGroup', default: null },
+    joinedGroupAt: { type: Date, default: null },
     nationality: { type: String, trim: true, default: null },
     language: { type: String, trim: true, default: null },
   },

@@ -84,6 +84,9 @@ function TouristChecks() {
         ) : isPending ? (
           <>
             <p className="sos-hint"><strong>{t('checks.areYouSafe')}</strong></p>
+            {check.episodeAt && (
+              <p className="form-hint">We haven’t received your location for a while. Confirm below, and keep “Share my location” on with the app open. If you are in danger, press SOS or call 112.</p>
+            )}
             <p className="form-hint">
               {remaining ? t('checks.answerWithin', { time: remaining }) : t('checks.late')}
             </p>

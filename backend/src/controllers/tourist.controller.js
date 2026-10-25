@@ -40,6 +40,7 @@ async function getMyProfile(req, res, next) {
   try {
     let profile = await TouristProfile.findOne({ user: req.user.id })
       .populate('device', 'deviceId status isSimulated lastSeen type')
+      .populate('group', 'name')
       .lean();
 
     if (!profile) {

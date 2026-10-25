@@ -20,6 +20,8 @@ const STATE_TEXT = {
   failed: 'Could not be sent',
   synced: 'Delivered',
 };
+// Sent to the network but never answered by the server (e.g. a gateway error): it may or may not have been received.
+const UNCONFIRMED_TEXT = 'Not confirmed — it may have reached the server. Retrying automatically with the same request';
 
 /**
  * Top-bar indicator for the offline queue. Hidden when online with nothing queued. It never
@@ -56,7 +58,7 @@ function SyncStatus() {
               {items.map((e) => (
                 <li key={e.id}>
                   <strong>{e.label}</strong>
-                  <small className="form-hint block">{STATE_TEXT[e.status]} · {formatDateTime(e.clientAt)}{e.attempts ? ` · ${e.attempts} attempt${e.attempts === 1 ? '' : 's'}` : ''}</small>
+                  <small className="form-hint block">{e.status === 'pending' && e.uncertain ? UNCONFIRMED_TEXT : STATE_TEXT[e.status]} · {formatDateTime(e.clientAt)}{e.attempts ? ` · ${e.attempts} attempt${e.attempts === 1 ? '' : 's'}` : ''}</small>
                   {e.note && <small className="form-hint block">{e.note}</small>}
                   {e.lastError && e.status !== 'synced' && <small className="form-error block">{e.lastError}</small>}
                   <span className="sync__actions">

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Bot, Compass, Loader2, MapPin, Mic, MicOff, Navigation, Phone, Plus, SendHorizontal, ShieldAlert, Sparkles, TriangleAlert, User as UserIcon, X } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { useAuth } from '../../shared/auth/AuthContext.jsx';
@@ -140,7 +141,8 @@ function Copilot() {
   const { t, lang } = useI18n();
   const role = user?.role === 'admin' ? 'admin' : 'tourist';
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
+  const routeState = useLocation().state; // e.g. an incident page can pre-fill a review question (never auto-sent)
+  const [input, setInput] = useState(() => (typeof routeState?.prefill === 'string' ? routeState.prefill.slice(0, 500) : ''));
   const [busy, setBusy] = useState(false);
   const [available, setAvailable] = useState(null); // null = checking
   const [fix, setFix] = useState(null); // optional browser location, tourists only: { lat, lng, accuracy, capturedAt }

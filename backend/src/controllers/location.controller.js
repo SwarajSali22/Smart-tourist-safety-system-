@@ -20,7 +20,14 @@ async function reportMyLocation(req, res, next) {
     let device = profile?.device || null;
 
     if (device && device.type !== 'phone') {
-      return res.json({ success: true, accepted: false, reason: 'wristband_assigned' });
+      // Nothing is recorded. Say which device is in the way and whether it has ever reported, so the app can
+      // tell the tourist the truth (a simulator that never sent anything is not "your tracker").
+      return res.json({
+        success: true,
+        accepted: false,
+        reason: 'wristband_assigned',
+        device: { deviceId: device.deviceId, isSimulated: Boolean(device.isSimulated), hasReported: Boolean(device.lastSeen) },
+      });
     }
 
     if (!device) {

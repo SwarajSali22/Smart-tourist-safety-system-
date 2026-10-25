@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1220" />
+    <title>You are offline — Smart Tourist Safety System</title>
+    <!-- Static page: no scripts that talk to the server, no user data, no external resources. -->
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 20px;
+        background: #0b1220; color: #e6ecf5; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; line-height: 1.55; }
+      main { width: 100%; max-width: 460px; background: #121b2d; border: 1px solid #22304a; border-radius: 14px; padding: 28px 24px; }
+      h1 { margin: 0 0 8px; font-size: 1.4rem; letter-spacing: -.02em; }
+      p { margin: 0 0 14px; color: #9db0c9; font-size: 15px; }
+      .emergency { display: block; padding: 16px; margin: 18px 0; text-align: center; text-decoration: none; border-radius: 10px;
+        background: #dc2626; color: #fff; font-weight: 700; font-size: 1.15rem; }
+      .emergency small { display: block; font-weight: 500; font-size: 13px; opacity: .92; }
+      .note { padding: 12px 14px; border-radius: 10px; background: #33260a; border: 1px solid #6b4e10; color: #fbbf24; font-size: 14px; }
+      .note strong { color: #fde68a; }
+      .retry { display: inline-block; margin-top: 6px; padding: 12px 20px; border-radius: 8px; background: #38bdf8; color: #06101d; font-weight: 700; text-decoration: none; }
+      :focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>You are offline</h1>
+      <p>This device can't reach the Smart Tourist Safety System right now, so the app can't load.</p>
+
+      <a class="emergency" href="tel:112">
+        In an emergency, call 112
+        <small>India's national emergency number</small>
+      </a>
+
+      <p class="note">
+        <strong>Offline SOS is not a delivered SOS.</strong>
+        An SOS or check-in made while you have no connection is only held on this device. It has not reached an
+        administrator or a responder until the connection returns and the app confirms it was received.
+        Do not rely on it. Call 112.
+      </p>
+
+      <a class="retry" href="/">Try again</a>
+    </main>
+    <script>
+      // Reload automatically as soon as the browser reports it is back online.
+      window.addEventListener('online', function () { window.location.replace('/'); });
+    </script>
+  </body>
+</html>

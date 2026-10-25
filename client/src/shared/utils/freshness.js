@@ -15,7 +15,8 @@ export function freshnessOf(lastSeen, now = Date.now()) {
   return 'offline';
 }
 
-export const FRESH_LABEL = { live: 'Live', stale: 'Stale', offline: 'Offline', never: 'No data yet' };
+// An old fix is never called "live": 2–15 min = Last known, beyond = Overdue (last known position only).
+export const FRESH_LABEL = { live: 'Live', stale: 'Last known', offline: 'Overdue · last known', never: 'Location unavailable' };
 export const FRESH_VARIANT = { live: 'success', stale: 'warning', offline: 'neutral', never: 'neutral' };
 
 /**

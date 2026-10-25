@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Copy, MapPin, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Bot, Copy, MapPin, ShieldCheck } from 'lucide-react';
 import { api, tokens } from '../../api/client.js';
 import { connectSocket } from '../../shared/socket/socket.js';
 import { useOnReconnect } from '../../shared/socket/useSocketStatus.js';
@@ -196,6 +196,7 @@ function IncidentDetail() {
   const fresh = device ? freshnessOf(device.lastSeen, now) : 'never';
   const overdue = Boolean(data.overdue);
   const loc = sosEvent?.location || device?.lastLocation;
+  const safetyAlert = incident.timeline?.find((e) => e.metadata?.kind === 'automated_safety_alert')?.metadata || null;
 
   return (
     <div className="app-page">
@@ -267,6 +268,32 @@ function IncidentDetail() {
         {incident.assignedAdmin && <p className="form-hint mt-4">Assigned to <strong>{incident.assignedAdmin.name}</strong> ({incident.assignedAdmin.role})</p>}
         {incident.resolution && <p className="form-hint mt-4">Resolution note: {incident.resolution}</p>}
       </Card>
+
+      {safetyAlert && (
+        <Card title="Automated safety alert (not an SOS)" className="mt-4">
+          <p className="form-hint">
+            Raised by the system because no location or check-in arrived. The tourist did not press SOS, and nothing has been sent to emergency services.
+            Silence can have harmless causes. Severity <strong>{label(safetyAlert.severity)}</strong> comes from fixed rules, not AI.
+          </p>
+          {safetyAlert.lastKnownLocation ? (
+            <p className="mt-4">
+              <MapPin size={14} aria-hidden="true" /> Last known position {safetyAlert.lastKnownLocation.lat.toFixed(5)}, {safetyAlert.lastKnownLocation.lng.toFixed(5)}
+              {' '}· received {formatDateTime(safetyAlert.lastKnownLocation.receivedAt)} ({safetyAlert.lastKnownLocation.ageMin} min before the alert)
+              {safetyAlert.lastKnownLocation.accuracyM != null ? ` · accuracy ±${Math.round(safetyAlert.lastKnownLocation.accuracyM)} m` : ''}
+              {safetyAlert.locationIsStale && <> <Badge variant="warning">Stale · may be outdated</Badge></>}
+            </p>
+          ) : <p className="mt-4">No location was ever received.</p>}
+          <ul className="activity mt-4">{(safetyAlert.reasons || []).map((r, i) => <li key={i}>{r}</li>)}</ul>
+          <ul className="activity mt-4">
+            {(safetyAlert.timeline || []).map((e, i) => <li key={i}><strong>{e.event}</strong> <span className="form-hint">{formatDateTime(e.at)}</span></li>)}
+          </ul>
+          <Link
+            className="btn btn--ghost btn--sm mt-4"
+            to="/admin/copilot"
+            state={{ prefill: `Review automated safety alert, incident ${String(incident._id).slice(-8)}: summarise the timeline, the last known location and zone context, and recommend a review priority. Do not assume the tourist is safe or in danger.` }}
+          ><Bot size={14} aria-hidden="true" /> Ask Copilot to review</Link>
+        </Card>
+      )}
 
       <div className="detail-grid mt-4">
         <div>

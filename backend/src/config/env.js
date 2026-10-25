@@ -20,6 +20,10 @@ const env = {
   jwtRefreshSecret: process.env.JWT_REFRESH_SECRET || '',
   jwtRefreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   bcryptRounds: Number(process.env.BCRYPT_ROUNDS) || 12,
+  // Public HTTPS address of the deployed app. Used ONLY to build invitation links/QR codes; never guessed.
+  publicAppUrl: (process.env.PUBLIC_APP_URL || '').trim().replace(/\/+$/, ''),
+  // Demo only: INVITE_DEMO=1 lets a TEMPORARY https tunnel address build invitation links (never QR codes) outside production.
+  inviteDemo: process.env.INVITE_DEMO === '1' && process.env.NODE_ENV !== 'production',
   safetyCheckIntervalMinutes: Number(process.env.SAFETY_CHECK_INTERVAL_MINUTES) || 25,
   safetyCheckResponseWindowMinutes: Number(process.env.SAFETY_CHECK_RESPONSE_WINDOW_MINUTES) || 5,
   // Place search / reverse geocoding (admin Help Centers form). Defaults to the public OpenStreetMap

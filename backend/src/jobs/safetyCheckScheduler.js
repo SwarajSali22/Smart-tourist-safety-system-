@@ -1,8 +1,9 @@
-const { Device, SafetyCheck, Incident } = require('../models');
+const { SafetyCheck, Incident } = require('../models');
 const { escalateIncident, ACTIVE_STATUSES } = require('../services/incidents/lifecycle');
 const { sweepTrips } = require('../services/trips/tripMonitor');
 const { sweepRisk } = require('../services/riskAssessment/sweepRisk');
 const { escalateMissedCheck } = require('../services/safetyCheck/escalate');
+const { sweepSilence } = require('../services/safetyCheck/workflow');
 const env = require('../config/env');
 const thresholds = require('../config/thresholds');
 
@@ -10,55 +11,23 @@ const SWEEP_MS = 60 * 1000;
 const { recordRun } = require('../services/health/jobStatus');
 
 /**
- * Two-pass sweep, run every 60s:
- *  1. Prompt pass — devices actively reporting telemetry with no pending
- *     check, whose last check (or lack thereof) is old enough, get a new
- *     SafetyCheck + safetycheck:prompt.
- *  2. Escalation pass — pending checks past the response window escalate
- *     into an Incident (services/safetyCheck/escalate.js).
+ * Run every 60s:
+ *  1. Silence clock — 15 min overdue / 20 min check-in request / 25 min automated safety alert
+ *     (services/safetyCheck/workflow.js).
+ *  2. Legacy pass — admin-triggered checks that went unanswered past the response window become a safety alert
+ *     (never an SOS).
  */
-async function sweep(io) {
-  const now = Date.now();
-  const intervalMs = env.safetyCheckIntervalMinutes * 60 * 1000;
+async function sweep(io, now = Date.now()) {
   const windowMs = env.safetyCheckResponseWindowMinutes * 60 * 1000;
 
-  // ── Prompt pass ──────────────────────────────────────────────────────────
-  // Only devices that are actually reporting right now — a stale simulator/wristband must not
-  // be prompted (an unanswered prompt would later raise an SOS from an old location).
-  const activeDevices = await Device.find({
-    status: 'active',
-    tourist: { $ne: null },
-    lastSeen: { $gte: new Date(now - thresholds.device.staleMs) },
-  });
-
-  for (const device of activeDevices) {
-    const pending = await SafetyCheck.findOne({
-      tourist: device.tourist,
-      respondedAt: null,
-      escalated: false,
-    });
-    if (pending) continue;
-
-    const lastCheck = await SafetyCheck.findOne({ tourist: device.tourist }).sort({ scheduledAt: -1 });
-    const dueSince = lastCheck ? lastCheck.scheduledAt.getTime() : device.lastSeen?.getTime() || now;
-    if (now - dueSince < intervalMs) continue;
-
-    const safetyCheck = await SafetyCheck.create({
-      tourist: device.tourist,
-      scheduledAt: new Date(),
-      triggeredBy: 'scheduler',
-    });
-
-    if (io) {
-      io.to('admin').emit('safetycheck:prompt', safetyCheck);
-      io.to(`tourist:${device.tourist}`).emit('safetycheck:prompt', safetyCheck);
-    }
-  }
+  await sweepSilence(io, now);
 
   // ── Escalation pass ──────────────────────────────────────────────────────
   const overdue = await SafetyCheck.find({
     respondedAt: null,
     escalated: false,
+    episodeAt: null, // silence-clock checks are handled by sweepSilence
+    closedAt: null,
     scheduledAt: { $lte: new Date(now - windowMs) },
   });
 

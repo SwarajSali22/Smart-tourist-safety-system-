@@ -1,7 +1,6 @@
 const { Incident, Device } = require('../../models');
 const { recordProof } = require('../blockchain/auditChain');
 const { evaluateRisk } = require('../riskAssessment/evaluateRisk');
-const { triggerSos, SosAlreadyActiveError } = require('../sos/triggerSos');
 const thresholds = require('../../config/thresholds');
 const { findRelatedIncident, attachEvent } = require('../incidents/correlate');
 
@@ -10,7 +9,7 @@ const { findRelatedIncident, attachEvent } = require('../incidents/correlate');
  * create-Incident + emit shape services/sos/triggerSos.js established.
  * Marks the SafetyCheck escalated + linked before returning.
  */
-async function _escalate(safetyCheck, { severity, type, action, actorLabel }, io) {
+async function _escalate(safetyCheck, { severity, type, action, actorLabel, metadata = null }, io) {
   // Correlation: if this tourist already has an active incident nearby in time, add this event to it.
   const related = await findRelatedIncident(safetyCheck.tourist);
   let incident;
@@ -23,7 +22,7 @@ async function _escalate(safetyCheck, { severity, type, action, actorLabel }, io
       severity,
       status: 'open',
       sourceRef: { refModel: 'SafetyCheck', refId: safetyCheck._id },
-      timeline: [{ actorLabel, action }],
+      timeline: [{ actorLabel, action, metadata }],
     });
     await recordProof('incident_opened', 'Incident', incident);
     await incident.populate('tourist', 'name email isDemo');
@@ -47,65 +46,36 @@ async function _escalate(safetyCheck, { severity, type, action, actorLabel }, io
   return incident;
 }
 
-// A safety check that went unanswered past the response window. Phase 11:
-// an unresponsive lone tourist is a real emergency, not just an admin note
-// — route through the same triggerSos() pipeline as a manual SOS button
-// press, so Device.emergencyMode flips automatically. Falls back to a
-// plain Incident only if there's no device/location to put into emergency
-// mode in the first place.
+// A safety check that went unanswered. This is an AUTOMATED SAFETY ALERT for a human to review (Incident type
+// 'no_response'), never an SOS: the tourist did not press anything, and silence can have harmless causes
+// (no signal, phone off). Used for admin-triggered checks; the 15/20/25-minute workflow calls escalateOverdueAlert.
 async function escalateMissedCheck(safetyCheck, io) {
-  const device = await Device.findOne({ tourist: safetyCheck.tourist });
+  const device = await Device.findOne({ tourist: safetyCheck.tourist }).select('lastSeen lastLocation').lean();
+  const known = device?.lastLocation?.lat != null;
+  const age = device?.lastSeen ? Math.round((Date.now() - new Date(device.lastSeen).getTime()) / 60000) : null;
+  return _escalate(
+    safetyCheck,
+    {
+      severity: 'medium', type: 'no_response', actorLabel: 'system',
+      action: known && age != null && age * 60000 > thresholds.device.staleMs
+        ? 'Safety check unanswered (device offline; last position is old)' : 'Safety check unanswered',
+      metadata: { kind: 'automated_safety_alert', isSos: false },
+    },
+    io
+  );
+}
 
-  if (!device?.lastLocation || device.lastLocation.lat == null) {
-    return _escalate(
-      safetyCheck,
-      { severity: 'medium', type: 'no_response', action: 'Safety check unanswered', actorLabel: 'system' },
-      io
-    );
-  }
-
-  // The device stopped reporting, so its last position is old: don't raise a (false) SOS from it.
-  const lastSeenMs = device.lastSeen ? new Date(device.lastSeen).getTime() : 0;
-  if (Date.now() - lastSeenMs > thresholds.device.staleMs) {
-    return _escalate(
-      safetyCheck,
-      { severity: 'medium', type: 'no_response', action: 'Safety check unanswered (device offline)', actorLabel: 'system' },
-      io
-    );
-  }
-
-  let incident;
-  try {
-    ({ incident } = await triggerSos({
-      tourist: safetyCheck.tourist,
-      device: device._id,
-      location: device.lastLocation,
-      source: 'auto_no_response',
-      io,
-    }));
-  } catch (err) {
-    if (!(err instanceof SosAlreadyActiveError)) throw err;
-    // Already in an active SOS/emergency — attach to that open incident
-    // instead of creating a duplicate.
-    const related = await findRelatedIncident(safetyCheck.tourist);
-    incident = related
-      ? await attachEvent(related, { action: 'Safety check unanswered', severity: 'high', sourceModel: 'SafetyCheck', sourceId: safetyCheck._id })
-      : await Incident.findOne({ tourist: safetyCheck.tourist, status: { $in: ['open', 'in_progress'] } }).sort({ createdAt: -1 });
-  }
-
-  safetyCheck.escalated = true;
-  safetyCheck.incident = incident?._id || null;
-  await safetyCheck.save();
-
-  await evaluateRisk(safetyCheck.tourist, io, { force: true });
-
-  if (io) {
-    const payload = { safetyCheck, incident };
-    io.to('admin').emit('safetycheck:missed', payload);
-    io.to(`tourist:${safetyCheck.tourist}`).emit('safetycheck:missed', payload);
-  }
-
-  return incident;
+// 25-minute escalation of the silence-clock workflow. `context` is the admin-facing snapshot built by workflow.js.
+async function escalateOverdueAlert(safetyCheck, context, io) {
+  return _escalate(
+    safetyCheck,
+    {
+      severity: context.severity, type: 'no_response', actorLabel: 'system',
+      action: `Automated safety alert: no location or check-in for ${Math.round((Date.now() - new Date(safetyCheck.episodeAt).getTime()) / 60000)} min (not an SOS)`,
+      metadata: context,
+    },
+    io
+  );
 }
 
 // A tourist explicitly responded "unsafe".
@@ -117,4 +87,4 @@ async function escalateUnsafeResponse(safetyCheck, io) {
   );
 }
 
-module.exports = { escalateMissedCheck, escalateUnsafeResponse };
+module.exports = { escalateMissedCheck, escalateOverdueAlert, escalateUnsafeResponse };

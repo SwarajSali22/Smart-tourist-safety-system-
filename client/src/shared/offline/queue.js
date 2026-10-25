@@ -43,29 +43,38 @@ function currentUserId() {
 const mine = (e) => e.user === currentUserId();
 
 const isNetworkError = (err) => !err?.status; // ApiError always has a status; fetch failures don't
+// 502/503/504 come from a gateway, proxy or tunnel in front of the server, not from the server itself, so the request
+// may or may not have been processed. Callers that opt in (the SOS) treat that as "unconfirmed", never as sent or rejected.
+const isGatewayError = (err) => err?.status === 502 || err?.status === 503 || err?.status === 504;
+// Once a request has actually been put on the network, a later failure proves nothing about whether the server got it.
+const wasOnWire = () => typeof navigator === 'undefined' || navigator.onLine !== false;
 
 /**
  * Sends a request now, or queues it if the network is unreachable.
  * @returns {{ status: 'delivered', data } | { status: 'queued', eventId }}  (server rejections throw)
  */
-export async function sendOrQueue({ kind, label, method = 'POST', path, body = {} }) {
+export async function sendOrQueue({ kind, label, method = 'POST', path, body = {}, queueOnGateway = false }) {
   const id = newId();
   const clientAt = new Date().toISOString();
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    return enqueue({ id, kind, label, method, path, body, clientAt });
+    return enqueue({ id, kind, label, method, path, body, clientAt, uncertain: false }); // offline: it certainly did not leave this device
   }
   try {
     const data = await api[method.toLowerCase()](path, body, { headers: { 'Idempotency-Key': id } });
     return { status: 'delivered', data };
   } catch (err) {
-    if (!isNetworkError(err)) throw err;
-    return enqueue({ id, kind, label, method, path, body, clientAt });
+    // The request was sent, so the server may have processed it. Keep the SAME id (it is the Idempotency-Key) for every
+    // retry: if it was processed, the server replays its stored answer instead of applying the request a second time.
+    if (isNetworkError(err) || (queueOnGateway && isGatewayError(err))) {
+      return enqueue({ id, kind, label, method, path, body, clientAt, uncertain: true });
+    }
+    throw err;
   }
 }
 
 function enqueue(entry) {
-  commit([...items, { ...entry, user: currentUserId(), status: 'pending', attempts: 0, lastError: null }]);
-  return { status: 'queued', eventId: entry.id };
+  commit([...items, { attempts: 0, lastError: null, ...entry, user: currentUserId(), status: 'pending' }]);
+  return { status: 'queued', eventId: entry.id, uncertain: Boolean(entry.uncertain) };
 }
 
 async function sendOne(entry) {
@@ -75,14 +84,14 @@ async function sendOne(entry) {
   } catch (err) {
     if (isNetworkError(err)) {
       const attempts = entry.attempts + 1;
-      update(entry.id, { attempts, lastError: 'No connection', status: attempts >= MAX_ATTEMPTS ? 'failed' : 'pending' });
+      update(entry.id, { attempts, lastError: 'No connection', status: attempts >= MAX_ATTEMPTS ? 'failed' : 'pending', ...(wasOnWire() ? { uncertain: true } : {}) });
       return false; // still offline: stop this round
     }
     if (err.status === 404 || err.status === 409) {
       update(entry.id, { status: 'synced', syncedAt: new Date().toISOString(), note: 'The server already had newer information, so this was not applied.' });
     } else if (err.status >= 500) {
       const attempts = entry.attempts + 1;
-      update(entry.id, { attempts, lastError: err.message, status: attempts >= MAX_ATTEMPTS ? 'failed' : 'pending' });
+      update(entry.id, { attempts, lastError: err.message, status: attempts >= MAX_ATTEMPTS ? 'failed' : 'pending', uncertain: true });
     } else {
       update(entry.id, { status: 'failed', lastError: err.message });
     }

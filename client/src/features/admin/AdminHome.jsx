@@ -15,6 +15,7 @@ import ErrorState from '../../shared/components/ui/ErrorState.jsx';
 import GeoMap from '../../shared/components/GeoMap.jsx';
 import RiskBoard from '../../shared/components/RiskBoard.jsx';
 import AttentionPanel from './AttentionPanel.jsx';
+import SafetyMonitor from './SafetyMonitor.jsx';
 import { BarChart } from '../../shared/components/Charts.jsx';
 import { label, timeAgo } from '../../shared/utils/format.js';
 
@@ -137,7 +138,7 @@ function AdminHome() {
 
       <div className="dashboard-grid">
         <Card title="Live map" className="dash-map">
-          <GeoMap zones={zones} devices={devices} riskByTourist={risk.byTourist} height={340} allowFullscreen showLegend />
+          <GeoMap zones={zones} devices={devices} riskByTourist={risk.byTourist} height={340} allowFullscreen showLegend autoFit />
           <p className="form-hint mt-4">
             <Link to="/admin/map">Open the full live map →</Link> for trails, replay and the incident heatmap.
           </p>
@@ -171,6 +172,8 @@ function AdminHome() {
           {trend ? <BarChart data={trend} title="Incidents per day" unit="incidents" /> : <p className="placeholder-text">Loading trend…</p>}
         </Card>
       </div>
+
+      <SafetyMonitor />
     </div>
   );
 }

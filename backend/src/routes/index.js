@@ -20,11 +20,14 @@ const tripRoutes = require('./trip.routes');
 const routeRiskRoutes = require('./routeRisk.routes');
 const auditRoutes = require('./audit.routes');
 const copilotRoutes = require('./copilot.routes');
+const groupRoutes = require('./group.routes');
 
 const router = express.Router();
 
 router.use(healthRoutes);
 router.use('/auth',     authRoutes);
+router.use('/groups',   groupRoutes.staff);
+router.use('/invitations', groupRoutes.publicRouter);
 router.use('/tourists', touristRoutes);
 router.use('/devices',  deviceRoutes);
 router.use('/zones',    zoneRoutes);

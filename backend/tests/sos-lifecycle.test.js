@@ -21,9 +21,9 @@ describe('SOS is never re-created from stale data', () => {
     assert.ok(d);
   });
 
-  test('a stale device is not prompted, and an unanswered check from an offline device makes no SOS', async () => {
+  test('a device silent for over 12 h is not monitored, and an unanswered check from an offline device makes an alert, never an SOS', async () => {
     const t = await h.createUser('tourist');
-    await h.createDevice(t.user, { lastLocation: { lat: 1, lng: 1 }, lastSeen: new Date(Date.now() - 3 * 60 * MIN) });
+    await h.createDevice(t.user, { lastLocation: { lat: 1, lng: 1 }, lastSeen: new Date(Date.now() - 13 * 60 * MIN) });
     await sweep(null);
     assert.equal(await models.SafetyCheck.countDocuments({ tourist: t.user._id }), 0);
 
@@ -35,15 +35,15 @@ describe('SOS is never re-created from stale data', () => {
     assert.equal(await models.Incident.countDocuments({ tourist: t2.user._id, type: 'no_response' }), 1);
   });
 
-  test('a live device that ignores a check still gets an SOS stamped with the real creation time', async () => {
+  test('a live device that ignores an admin-triggered check gets an automated safety alert, not an SOS', async () => {
     const t = await h.createUser('tourist');
     await h.createDevice(t.user, { lastLocation: { lat: 1, lng: 1 }, lastSeen: new Date() });
     await models.SafetyCheck.create({ tourist: t.user._id, scheduledAt: new Date(Date.now() - 6 * MIN) });
-    const before = Date.now();
     await sweep(null);
-    const sos = await models.SOSEvent.findOne({ tourist: t.user._id });
-    assert.ok(sos);
-    assert.ok(sos.createdAt.getTime() >= before - 1000);
+    assert.equal(await models.SOSEvent.countDocuments({ tourist: t.user._id }), 0);
+    const inc = await models.Incident.findOne({ tourist: t.user._id });
+    assert.equal(inc.type, 'no_response');
+    assert.equal(inc.timeline[0].metadata.isSos, false);
   });
 
   test('startup reconcile closes an SOS whose incident is already resolved', async () => {

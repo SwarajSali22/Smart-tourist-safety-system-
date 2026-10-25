@@ -1,0 +1,28 @@
+{
+  "id": "/",
+  "name": "Smart Tourist Safety System",
+  "short_name": "STS Safety",
+  "description": "Live safety monitoring, SOS alerts and check-ins for tourists, with a command view for administrators and responders.",
+  "lang": "en",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "categories": ["travel", "navigation"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Open SOS page",
+      "short_name": "SOS page",
+      "description": "Opens the SOS screen. Nothing is sent until you confirm there.",
+      "url": "/tourist/sos",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}
